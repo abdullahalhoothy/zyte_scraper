@@ -78,7 +78,7 @@ def flatten_json(y):
 
 
 def get_all_keys(directory, num_files=50):
-    all_col_names_path = r"G:\My Drive\Personal\Work\offline\Jupyter\Git\s_locator\storage\postgres\all_col_names.json"
+    all_col_names_path = rf"{directory}_all_col_names.json"
     if os.path.exists(all_col_names_path):
         with open(all_col_names_path, "r", encoding="utf-8") as file:
             all_keys = json.load(file)
@@ -96,9 +96,12 @@ def get_all_keys(directory, num_files=50):
 
     list_all_keys = list(all_keys)
     list_all_keys.sort(reverse=True)
-    list_all_keys.remove("")
+    try:
+        list_all_keys.remove("")
+    except:
+        pass
 
-    output_data = {"all_col_names": all_keys}
+    output_data = {"all_col_names": list(all_keys)}
     with open(all_col_names_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=4, ensure_ascii=False)
     print(f"Data saved to: {all_col_names_path}")
@@ -111,7 +114,7 @@ def move_to_front(lst, items_to_move):
     return front_items + remaining_items
 
 
-def generate_insert_sql(url, flattened_data, all_keys):
+def generate_insert_sql(directory,url, flattened_data, all_keys):
     items_to_move = ["price",
                      "additional__WebListing_uri___location_lat", 
                      "additional__WebListing_uri___location_lng"]
@@ -131,11 +134,11 @@ def generate_insert_sql(url, flattened_data, all_keys):
         ]
     )
 
-    placeholders = ", ".join(["%s"] * len(columns))
+    placeholders = ", ".join([f"%s" for _ in range(len(columns))])
     column_names = ", ".join(f'{col.lower()}' for col in columns)
 
     sql = f"""
-    INSERT INTO riyadh_villa_allrooms ({column_names})
+    INSERT INTO {directory} ({column_names})
     VALUES ({placeholders})
     ON CONFLICT (url) DO UPDATE
     SET {', '.join([f'{col.lower()} = EXCLUDED.{col.lower()}' for col in columns])};
@@ -147,7 +150,7 @@ def generate_insert_sql(url, flattened_data, all_keys):
 def process_and_insert_data(directory, cursor, all_keys, limit=3):
     json_files = glob.glob(os.path.join(directory, "*_response_data.json"))
     processed_files = set()
-    sql_log_dir = "G:\\My Drive\\Personal\\Work\\offline\\Jupyter\\Git\\s_locator\\storage\\postgres\\sql_logs"
+    sql_log_dir = "sql_logs"
     os.makedirs(sql_log_dir, exist_ok=True)
 
     files_processed = 0
@@ -178,7 +181,7 @@ def process_and_insert_data(directory, cursor, all_keys, limit=3):
                 continue
 
             flattened = flatten_json(listing_data)
-            sql, values = generate_insert_sql(url, flattened, [col for col in all_keys if col !="url"])
+            sql, values = generate_insert_sql(directory,url, flattened, [col for col in all_keys if col !="url"])
             sql_statements.append((sql, values))
 
         if not sql_statements:
@@ -188,7 +191,7 @@ def process_and_insert_data(directory, cursor, all_keys, limit=3):
         # Execute SQL statements
         for sql, values in sql_statements:
             cursor.execute(sql, values)
-
+            
         # Save SQL statements to log file
         with open(log_file, "w", encoding="utf-8") as log:
             for sql, values in sql_statements:
@@ -217,7 +220,7 @@ def is_boolean_or_binary(series):
 
 
 def process_and_filter_data(directory, all_keys, num_files=350):
-    all_col_names_path = r"G:\My Drive\Personal\Work\offline\Jupyter\Git\s_locator\storage\postgres\process_and_filter_data.json"
+    all_col_names_path = r"process_and_filter_data.json"
     if os.path.exists(all_col_names_path):
         with open(all_col_names_path, "r", encoding="utf-8") as file:
             json_obj = json.load(file)
@@ -332,15 +335,8 @@ def process_and_filter_data(directory, all_keys, num_files=350):
     return sorted_new_keep_cols
 
 
-def main():
+def save_to_db(directories):
     try:
-        # conn = psycopg2.connect(
-        #     dbname="aqar_scraper",
-        #     user="scraper_user",
-        #     password="scraper_password",
-        #     host="localhost",
-        #     port="5432",
-        # )
         conn = psycopg2.connect(
             dbname="aqar_scraper",
             user="scraper_user",
@@ -351,30 +347,30 @@ def main():
 
         cursor = conn.cursor()
 
-        directory = "G:\\My Drive\\Personal\\Work\\offline\\Jupyter\\Git\\testwebscraping\\riyadh_villa_allrooms"
+        for directory in directories:
 
-        # Get all keys from the first 50 files
-        all_keys = get_all_keys(directory)
+            # Get all keys from the first 50 files
+            all_keys = get_all_keys(directory)
 
-        # Process and filter data
-        columns = process_and_filter_data(directory, all_keys)
-        columns.extend(["original_specifications", "original_additional_data"])
+            # Process and filter data
+            columns = process_and_filter_data(directory, all_keys)
+            columns.extend(["original_specifications", "original_additional_data"])
 
-        # Use the filtered DataFrame to create the table
-        create_table_sql = f"""
-        CREATE TABLE IF NOT EXISTS riyadh_villa_allrooms (
-            url TEXT PRIMARY KEY,
-            {', '.join([f'{col.lower()} TEXT' for col in columns if col != 'url'])},
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-        
-        cursor.execute(create_table_sql)
+            # Use the filtered DataFrame to create the table
+            create_table_sql = f"""
+            CREATE TABLE IF NOT EXISTS {directory} (
+                url TEXT PRIMARY KEY,
+                {', '.join([f'{col.lower()} TEXT' for col in columns if col != 'url'])},
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+            
+            cursor.execute(create_table_sql)
+            
+            # Process and insert data
+            processed_files = process_and_insert_data(directory, cursor, columns, limit=100)
 
-        # Process and insert data
-        processed_files = process_and_insert_data(directory, cursor, columns, limit=100)
-
-        conn.commit()
+            conn.commit()
         print(
             f"Data processing and insertion completed successfully. Processed {len(processed_files)} files."
         )
@@ -386,7 +382,3 @@ def main():
             cursor.close()
         if conn:
             conn.close()
-
-
-if __name__ == "__main__":
-    main()
