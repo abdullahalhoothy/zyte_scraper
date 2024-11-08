@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, List, Union
 
+from store_json_into_db import save_to_db
+
 import aiofiles
 import aiohttp
 
@@ -67,7 +69,9 @@ CONF = ScraperConfig(
     api_key=load_config()["api_key"],
     zyte_api_url="https://api.zyte.com/v1/extract",
     base_url_info={
-        "riyadh_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6",
+        "shaqra_villa_allrooms":"https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%B4%D9%82%D8%B1%D8%A7%D8%A1",
+        "sqdiq_villa_allrooms":"https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AB%D8%A7%D8%AF%D9%82"
+        # "riyadh_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6",
         # Add more base URLs here
     },
     listing_regex=r'href="(/\d+/.*?)"',
@@ -373,9 +377,9 @@ async def crawl_and_process(semaphore, client, base_url, dir_name, worker_id):
             status = await crawl_page_batch(client, base_url, dir_name)
             logger.info(f"Worker {worker_id} completed crawl_page_batch with status: {status}")
             #
-            # if status == "finished":
-            #     logger.info(f"Worker {worker_id} finished crawling all pages for {base_url}")
-            #     break
+            if status == "finished":
+                logger.info(f"Worker {worker_id} finished crawling all pages for {base_url}")
+                break
 
             # Scrape URLs of page
             await scrape_urls_of_page(client, base_url, dir_name, worker_id)
@@ -406,6 +410,10 @@ async def main():
         for result in results:
             if isinstance(result, Exception):
                 logger.error(f"Task failed with exception: {result}")
+                
+        save_to_db(list(CONF.base_url_info.keys()))
+        
+        logger.info("FINISHED SUCCESS----")
 
 
 if __name__ == "__main__":

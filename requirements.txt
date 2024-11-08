@@ -1,3 +1,6 @@
 aiohttp
 beautifulsoup4
 aiofiles
+psycopg2-binary
+pandas
+numpy
