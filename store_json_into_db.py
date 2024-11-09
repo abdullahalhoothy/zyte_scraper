@@ -115,7 +115,7 @@ def move_to_front(lst, items_to_move):
     return front_items + remaining_items
 
 
-def generate_insert_sql(directory,url, flattened_data, all_keys):
+def generate_insert_sql(schema_name,directory,url, flattened_data, all_keys):
     items_to_move = ["price",
                      "additional__WebListing_uri___location_lat", 
                      "additional__WebListing_uri___location_lng"]
@@ -139,7 +139,7 @@ def generate_insert_sql(directory,url, flattened_data, all_keys):
     column_names = ", ".join(f'{col.lower()}' for col in columns)
 
     sql = f"""
-    INSERT INTO {directory} ({column_names})
+    INSERT INTO {schema_name}.{directory} ({column_names})
     VALUES ({placeholders})
     ON CONFLICT (url) DO UPDATE
     SET {', '.join([f'{col.lower()} = EXCLUDED.{col.lower()}' for col in columns])};
@@ -148,7 +148,7 @@ def generate_insert_sql(directory,url, flattened_data, all_keys):
     return sql, tuple(values)
 
 
-def process_and_insert_data(directory, cursor, all_keys, limit=3):
+def process_and_insert_data(schema_name,directory, cursor, all_keys, limit=3):
     json_files = glob.glob(os.path.join(directory, "*_response_data.json"))
     processed_files = set()
     sql_log_dir = "sql_logs"
@@ -182,7 +182,7 @@ def process_and_insert_data(directory, cursor, all_keys, limit=3):
                 continue
 
             flattened = flatten_json(listing_data)
-            sql, values = generate_insert_sql(directory,url, flattened, [col for col in all_keys if col !="url"])
+            sql, values = generate_insert_sql(schema_name,directory,url, flattened, [col for col in all_keys if col !="url"])
             sql_statements.append((sql, values))
 
         if not sql_statements:
@@ -365,6 +365,7 @@ def save_to_db(data_json):
 
         cursor = conn.cursor()
 
+        ## Please don't change
         schema_name = "raw"
         
         create_raw_schema = f"""
@@ -403,8 +404,8 @@ def save_to_db(data_json):
 
             cursor.execute(create_table_sql)
             
-            # Process and insert data
-            processed_files = process_and_insert_data(f"{schema_name}.{directory}", cursor, columns, limit=100)
+            # Process and insert data >> Data always stored in RAW.directory
+            processed_files = process_and_insert_data(schema_name,directory, cursor, columns, limit=100)
             
             
             ## Save/Update metadata
