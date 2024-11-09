@@ -394,28 +394,29 @@ async def crawl_and_process(semaphore, client, base_url, dir_name, worker_id):
 
 
 async def main():
+    config = load_config()
     semaphore = asyncio.Semaphore(CONF.max_concurrent_requests)
     connector = aiohttp.TCPConnector(limit_per_host=CONF.max_concurrent_requests)
     async with aiohttp.ClientSession(connector=connector) as client:
         tasks = []
-        for worker_id, (dir_name, url) in enumerate(CONF.base_url_info.items(), start=0):
-            os.makedirs(dir_name, exist_ok=True)
-            await initialize_base_url_if_new(client, dir_name, url)
-            task = asyncio.create_task(
-                crawl_and_process(semaphore, client, url, dir_name, worker_id),
-                name=f"Worker-{worker_id}"
-            )
-            tasks.append(task)
+        # for worker_id, (dir_name, url) in enumerate(CONF.base_url_info.items(), start=0):
+        #     os.makedirs(dir_name, exist_ok=True)
+        #     await initialize_base_url_if_new(client, dir_name, url)
+        #     task = asyncio.create_task(
+        #         crawl_and_process(semaphore, client, url, dir_name, worker_id),
+        #         name=f"Worker-{worker_id}"
+        #     )
+        #     tasks.append(task)
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error(f"Task failed with exception: {result}")
+        # results = await asyncio.gather(*tasks, return_exceptions=True)
+        # for result in results:
+        #     if isinstance(result, Exception):
+        #         logger.error(f"Task failed with exception: {result}")
 
         # Initialize GCP manager once
         gcp_manager = GCPBucketManager(
-            bucket_name=os.getenv('BUCKET_NAME'),
-            credentials_path=os.getenv('CRED_PATH')
+        bucket_name=config["bucket_name"],
+        credentials_path=config["cred_path"]
         )
         
         # First upload to GCP
