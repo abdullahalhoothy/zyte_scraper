@@ -64,17 +64,17 @@ class ScraperConfig:
 def load_config(file_path='secret_config.json'):
     with open(file_path, 'r') as config_file:
         return json.load(config_file)
+    
+    
+def load_data_json(file_path='data.json'):
+    with open(file_path,'r') as data_file:
+        return json.load(data_file)
 
 
 CONF = ScraperConfig(
     api_key=load_config()["api_key"],
     zyte_api_url="https://api.zyte.com/v1/extract",
-    base_url_info={
-        "shaqra_villa_allrooms":"https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%B4%D9%82%D8%B1%D8%A7%D8%A1",
-        "sqdiq_villa_allrooms":"https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AB%D8%A7%D8%AF%D9%82"
-        # "riyadh_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6",
-        # Add more base URLs here
-    },
+    base_url_info=load_data_json(),
     listing_regex=r'href="(/\d+/.*?)"',
     expected_listing_count=20,
     max_concurrent_requests=1,
@@ -399,19 +399,19 @@ async def main():
     connector = aiohttp.TCPConnector(limit_per_host=CONF.max_concurrent_requests)
     async with aiohttp.ClientSession(connector=connector) as client:
         tasks = []
-        # for worker_id, (dir_name, url) in enumerate(CONF.base_url_info.items(), start=0):
-        #     os.makedirs(dir_name, exist_ok=True)
-        #     await initialize_base_url_if_new(client, dir_name, url)
-        #     task = asyncio.create_task(
-        #         crawl_and_process(semaphore, client, url, dir_name, worker_id),
-        #         name=f"Worker-{worker_id}"
-        #     )
-        #     tasks.append(task)
+        for worker_id, (dir_name, url) in enumerate(CONF.base_url_info.items(), start=0):
+            os.makedirs(dir_name, exist_ok=True)
+            await initialize_base_url_if_new(client, dir_name, url)
+            task = asyncio.create_task(
+                crawl_and_process(semaphore, client, url, dir_name, worker_id),
+                name=f"Worker-{worker_id}"
+            )
+            tasks.append(task)
 
-        # results = await asyncio.gather(*tasks, return_exceptions=True)
-        # for result in results:
-        #     if isinstance(result, Exception):
-        #         logger.error(f"Task failed with exception: {result}")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Task failed with exception: {result}")
 
         # Initialize GCP manager once
         gcp_manager = GCPBucketManager(
@@ -421,11 +421,13 @@ async def main():
         
         # First upload to GCP
         directories = list(CONF.base_url_info.keys())
+        
         upload_success = upload_json_to_gcp(directories, gcp_manager)
         if not upload_success:
             print("Warning: Failed to upload files to GCP bucket")
 
-        save_to_db(directories)
+        # Second upload to PostgresDB
+        save_to_db(CONF.base_url_info)
         
         logger.info("FINISHED SUCCESS----")
 

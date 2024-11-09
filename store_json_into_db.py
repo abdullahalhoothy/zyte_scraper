@@ -336,7 +336,24 @@ def process_and_filter_data(directory, all_keys, num_files=350):
     return sorted_new_keep_cols
 
 
-def save_to_db(directories):
+def save_metadata(table_name,cursor,metadata:dict):
+    
+    directory =  metadata['name']
+    url = metadata['url']
+    
+    insert_query = f"""
+        INSERT INTO {table_name}
+        (url,name)
+        VALUES ('{url}','{directory}')
+        ON CONFLICT (url) DO UPDATE
+        SET scraped_at = CURRENT_TIMESTAMP,
+            name = '{directory}';
+    """
+    
+    cursor.execute(insert_query)
+    
+    
+def save_to_db(data_json):
     try:
         conn = psycopg2.connect(
             dbname="aqar_scraper",
@@ -348,7 +365,25 @@ def save_to_db(directories):
 
         cursor = conn.cursor()
 
-        for directory in directories:
+        schema_name = "raw"
+        
+        create_raw_schema = f"""
+        CREATE SCHEMA IF NOT EXISTS {schema_name};
+        """
+        
+        metadata_table = "metadata"
+        create_metadata_table = f"""
+            CREATE TABLE IF NOT EXISTS {schema_name}.{metadata_table} (
+              url TEXT PRIMARY KEY,
+              name TEXT,
+              scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP  
+            );
+        """
+        cursor.execute(create_raw_schema)
+        cursor.execute(create_metadata_table)
+        
+        for directory,url in data_json.items():
+            
 
             # Get all keys from the first 50 files
             all_keys = get_all_keys(directory)
@@ -359,19 +394,30 @@ def save_to_db(directories):
 
             # Use the filtered DataFrame to create the table
             create_table_sql = f"""
-            CREATE TABLE IF NOT EXISTS {directory} (
+            CREATE TABLE IF NOT EXISTS {schema_name}.{directory} (
                 url TEXT PRIMARY KEY,
                 {', '.join([f'{col.lower()} TEXT' for col in columns if col != 'url'])},
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
-            
+
             cursor.execute(create_table_sql)
             
             # Process and insert data
-            processed_files = process_and_insert_data(directory, cursor, columns, limit=100)
+            processed_files = process_and_insert_data(f"{schema_name}.{directory}", cursor, columns, limit=100)
+            
+            
+            ## Save/Update metadata
+            metadata = {
+                "name":directory,
+                "url":url
+            }
+            
+            
+            save_metadata(f"{schema_name}.{metadata_table}",cursor,metadata)
 
             conn.commit()
+            
         print(
             f"Data processing and insertion completed successfully. Processed {len(processed_files)} files."
         )
