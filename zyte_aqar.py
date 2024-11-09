@@ -7,8 +7,9 @@ from base64 import b64decode, b64encode
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, List, Union
+from gcp import GCPBucketManager
 
-from store_json_into_db import save_to_db
+from store_json_into_db import save_to_db, upload_json_to_gcp
 
 import aiofiles
 import aiohttp
@@ -410,8 +411,20 @@ async def main():
         for result in results:
             if isinstance(result, Exception):
                 logger.error(f"Task failed with exception: {result}")
-                
-        save_to_db(list(CONF.base_url_info.keys()))
+
+        # Initialize GCP manager once
+        gcp_manager = GCPBucketManager(
+            bucket_name=os.getenv('BUCKET_NAME'),
+            credentials_path=os.getenv('CRED_PATH')
+        )
+        
+        # First upload to GCP
+        directories = list(CONF.base_url_info.keys())
+        upload_success = upload_json_to_gcp(directories, gcp_manager)
+        if not upload_success:
+            print("Warning: Failed to upload files to GCP bucket")
+
+        save_to_db(directories)
         
         logger.info("FINISHED SUCCESS----")
 

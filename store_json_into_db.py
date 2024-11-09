@@ -12,7 +12,8 @@ import numpy as np
 import pandas as pd
 import os
 import pickle
-
+from typing import List
+from gcp import GCPBucketManager
 
 def clean_key(key):
     # Remove numbers from the key
@@ -382,3 +383,41 @@ def save_to_db(directories):
             cursor.close()
         if conn:
             conn.close()
+
+
+def upload_json_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) -> bool:
+    """
+    Upload JSON files to Google Cloud Storage bucket using provided GCPBucketManager instance
+    """
+    try:
+        # Get current timestamp for folder organization
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        for directory in directories:
+            # Get all JSON files in the directory
+            json_files = glob.glob(os.path.join(directory, "*.json"))
+            
+            for json_file in json_files:
+                try:
+                    # Read JSON file
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        json_data = json.load(f)
+
+                    # Create GCS path: bucket/timestamp/database/schema/table/file.json
+                    file_name = os.path.basename(json_file)
+                    gcs_path = f"{timestamp}/{directory}/raw_data/{file_name}"
+                    
+                    # Upload file to GCS using our manager
+                    gcp_manager.save_json(json_data, gcs_path)
+                    
+                    print(f"Successfully uploaded {json_file} to {gcs_path}")
+
+                except Exception as file_error:
+                    print(f"Error uploading file {json_file}: {str(file_error)}")
+                    continue
+
+        return True
+
+    except Exception as e:
+        print(f"Error in GCP upload: {str(e)}")
+        return False

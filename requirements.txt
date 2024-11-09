@@ -4,3 +4,5 @@ aiofiles
 psycopg2-binary
 pandas
 numpy
+google-cloud-storage
+google-auth
