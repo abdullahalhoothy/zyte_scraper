@@ -13,21 +13,88 @@ sys.path.append(module_dir)
 from common_methods import GCPBucketManager
 
 
+def ensure_database_exists(config, db_name):
+    """
+    Ensures database exists, creates it if it doesn't, and returns a connection to it
+    """
+    try:
+        # First try to connect directly to the target database
+        return get_db_connection(config, db_name)
+    except psycopg2.Error as e:
+        if "database" in str(e) and "does not exist" in str(e):
+            print(f"Database {db_name} does not exist. Creating...")
+            # Connect to postgres to create the database
+            postgres_conn = get_db_connection(config, "postgres")
+            postgres_conn.autocommit = True
+            try:
+                with postgres_conn.cursor() as cursor:
+                    # Create the new database
+                    cursor.execute(
+                        sql.SQL("CREATE DATABASE {}").format(
+                            sql.Identifier(db_name)
+                        )
+                    )
+                print(f"Successfully created database {db_name}")
+            finally:
+                postgres_conn.close()
+            
+            # Now connect to the newly created database
+            print(f"Connecting to newly created database {db_name}")
+            return get_db_connection(config, db_name)
+        raise
+
 def get_db_connection(db_config, db_name=None):
     """Create a database connection with optional database name override"""
     conn_params = db_config.copy()
     if db_name:
         conn_params["dbname"] = db_name
+    print(f"Attempting connection to database: {conn_params['dbname']}")
+    return psycopg2.connect(**conn_params)
+
+def process_database_structure(gcp, config, bucket_name, objects_to_create):
+    connections = {}
     try:
-        return psycopg2.connect(**conn_params)
-    except psycopg2.Error as e:
-        # If database doesn't exist, connect to default postgres database
-        if "database" in str(e) and "does not exist" in str(e):
-            conn_params["dbname"] = "postgres"
-            return psycopg2.connect(**conn_params)
+        # Process CSV files
+        for (db_name, schema_name, table_name), file_paths in objects_to_create["csv"].items():
+            if db_name not in connections:
+                # This will create the database if it doesn't exist and return a connection to it
+                connections[db_name] = ensure_database_exists(config, db_name)
+
+            conn = connections[db_name]
+            merged_df = read_and_merge_csv_files(gcp, file_paths)
+            
+            # Create schema and table with autocommit
+            create_schema_and_table(conn, merged_df, schema_name, table_name)
+            
+            # Now insert data in a new transaction
+            insert_data_into_table(conn, merged_df, table_name, schema_name)
+            conn.commit()
+            print(f"Data inserted into {db_name}.{schema_name}.{table_name}")
+
+        # Process image files
+        for (db_name, schema_name, table_name), image_data in objects_to_create["images"].items():
+            if db_name not in connections:
+                connections[db_name] = ensure_database_exists(config, db_name)
+
+            conn = connections[db_name]
+            insert_image_metadata(conn, schema_name, table_name, image_data)
+            conn.commit()
+            print(f"Image metadata inserted into {db_name}.{schema_name}.{table_name}")
+
+    except Exception as e:
+        print(f"Error occurred: {e}")
+        for conn in connections.values():
+            try:
+                conn.rollback()
+            except:
+                pass
         raise
-
-
+    finally:
+        for conn in connections.values():
+            try:
+                conn.close()
+            except:
+                pass
 def create_schema_and_table(conn, df, schema, table_name):
     """Creates schema and table if they don't exist."""
     conn.autocommit = True  # Temporarily enable autocommit
@@ -104,67 +171,6 @@ def create_schema_and_table(conn, df, schema, table_name):
     finally:
         conn.autocommit = False  # Restore autocommit to False
 
-
-def process_database_structure(gcp, config, bucket_name, objects_to_create):
-    connections = {}
-    try:
-        # Process CSV files
-        for (db_name, schema_name, table_name), file_paths in objects_to_create[
-            "csv"
-        ].items():
-            if db_name not in connections:
-                try:
-                    connections[db_name] = get_db_connection(config, db_name)
-                except psycopg2.Error:
-                    temp_conn = get_db_connection(config)
-                    temp_conn.autocommit = True
-                    with temp_conn.cursor() as cursor:
-                        cursor.execute(
-                            sql.SQL("CREATE DATABASE {}").format(
-                                sql.Identifier(db_name)
-                            )
-                        )
-                    temp_conn.close()
-                    connections[db_name] = get_db_connection(config, db_name)
-
-            conn = connections[db_name]
-            merged_df = read_and_merge_csv_files(gcp, file_paths)
-
-            # Create schema and table with autocommit
-            create_schema_and_table(conn, merged_df, schema_name, table_name)
-
-            # Now insert data in a new transaction
-            insert_data_into_table(conn, merged_df, table_name, schema_name)
-            conn.commit()  # Commit after successful insert
-            print(f"Data inserted into {db_name}.{schema_name}.{table_name}")
-
-        # Process image files
-        for (db_name, schema_name, table_name), image_data in objects_to_create[
-            "images"
-        ].items():
-            if db_name not in connections:
-                connections[db_name] = get_db_connection(config, db_name)
-            conn = connections[db_name]
-            insert_image_metadata(conn, schema_name, table_name, image_data)
-            conn.commit()  # Commit after successful insert
-            print(f"Image metadata inserted into {db_name}.{schema_name}.{table_name}")
-
-    except Exception as e:
-        print(f"Error occurred: {e}")
-        # Rollback all connections
-        for conn in connections.values():
-            try:
-                conn.rollback()
-            except:
-                pass
-        raise
-    finally:
-        # Close all connections
-        for conn in connections.values():
-            try:
-                conn.close()
-            except:
-                pass
 
 
 def create_database_structure(conn, df, db_name, schema, table_name):
