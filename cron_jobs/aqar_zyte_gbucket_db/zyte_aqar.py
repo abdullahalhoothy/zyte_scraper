@@ -500,9 +500,3 @@ async def main():
 
         logger.info("FINISHED SUCCESS----")
 
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        logger.critical(f"Critical error occurred: {str(e)}", exc_info=True)
