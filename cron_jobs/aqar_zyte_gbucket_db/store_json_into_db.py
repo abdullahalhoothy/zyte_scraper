@@ -259,7 +259,7 @@ def process_and_filter_data(directory, all_keys, num_files=350):
 
     # Keep only the columns that are in all_keys plus 'url'
     print("Keeping only the required columns...")
-    df = df[["url", "price"] + [col for col in all_keys if col in df.columns]]
+    df = df[["url"] + [col for col in all_keys if col in df.columns]]
     new_keep_cols = df.columns.tolist()
 
     # Sort the columns
@@ -276,7 +276,7 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         set([col for col in sorted_new_keep_cols if "specifications" not in col])
     )
     re_nonspec_cols.remove("url")
-    re_nonspec_cols.remove("price")
+    # re_nonspec_cols.remove("price")
     sorted_new_keep_cols = ["url", "price"] + re_spec_cols + re_nonspec_cols
 
     output_data = {"sorted_new_keep_cols": sorted_new_keep_cols}
@@ -322,7 +322,7 @@ def process_and_insert_data(directory, cursor, all_keys, limit=3):
 
             flattened = flatten_json(listing_data)
             sql, values = generate_insert_sql(
-                directory, url, flattened, [col for col in all_keys if col != "url"]
+                directory, url, flattened, [col for col in all_keys if col and col != "url"]
             )
             sql_statements.append((sql, values))
 
@@ -366,7 +366,7 @@ def save_to_db(directories, conn):
             create_table_sql = f"""
             CREATE TABLE IF NOT EXISTS {directory} (
                 url TEXT PRIMARY KEY,
-                {', '.join([f'{col.lower()} TEXT' for col in columns if col != 'url'])},
+                {', '.join([f'{col.lower()} TEXT' for col in columns if col and col != 'url'])},
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
