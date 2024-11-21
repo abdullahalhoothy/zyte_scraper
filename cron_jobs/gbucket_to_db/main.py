@@ -416,8 +416,7 @@ def process_all_pipelines(config):
             print(f"Error processing pipeline {pipeline_name}: {e}")
             continue
 
-
-if __name__ == "__main__":
+def main():
     try:
         with open("cron_jobs/gbucket_to_db/secrets_database.json", "r") as f:
             config = json.load(f)
