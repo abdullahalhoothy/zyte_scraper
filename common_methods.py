@@ -84,6 +84,7 @@ def upload_json_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) ->
     """
     try:
         # Get current timestamp for folder organization
+        base_path = 'postgreSQL/dbo_opertional/raw_schema-marketplace/real_estate'
         date = datetime.now().strftime("%Y%m%d")
 
         for directory in directories:
@@ -98,7 +99,7 @@ def upload_json_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) ->
 
                     # Create GCS path: bucket/timestamp/database/schema/table/file.json
                     file_name = os.path.basename(json_file)
-                    gcs_path = f"{directory}/{date}/raw_data/{file_name}"
+                    gcs_path = f"{base_path}/{directory}/{date}/raw_data/{file_name}"
 
                     # Upload file to GCS using our manager
                     gcp_manager.save_json(json_data, gcs_path)
