@@ -57,3 +57,25 @@ def get_create_table_query():
     -- Truncate the table to ensure clean data
     TRUNCATE TABLE "schema-marketplace".products;
     """
+
+def create_table_banners():
+    return """
+    -- Create schema if it doesn't exist
+    CREATE SCHEMA IF NOT EXISTS "schema-app_generic";
+    
+    -- Create table if it doesn't exist
+    CREATE TABLE IF NOT EXISTS "schema-app_generic".banners (
+        id TEXT PRIMARY KEY NOT NULL,
+        file_name varchar(500) NOT NULL,
+        url varchar(500) NULL
+    );
+
+    -- Truncate the table to ensure clean data
+    TRUNCATE TABLE "schema-app_generic".banners;
+    """
+
+def transformation_banners():
+    return """
+    INSERT INTO "schema-app_generic".banners
+    SELECT * FROM "schema-app_generic".banners;
+    """
