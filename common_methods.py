@@ -79,33 +79,22 @@ class GCPBucketManager:
 
 
     def upload_csv(
-        self, file_path: str, destination_path: str, chunk_size: int = 262144
+        self, file_path: str, destination_path: str
     ) -> None:
         """
-        Upload a CSV file to GCP bucket in a memory-efficient way using chunked upload.
-
+        Upload a CSV file to GCP bucket.
         Args:
             file_path (str): Local path to CSV file
             destination_path (str): Destination path in bucket
-            chunk_size (int): Size of chunks for upload in bytes (default 256KB to meet GCS requirements)
         """
         try:
             blob = self.bucket.blob(destination_path)
-
-            # For small files, use simple upload
-            if os.path.getsize(file_path) < chunk_size:
-                with open(file_path, "rb") as f:
-                    blob.upload_from_file(f, content_type="text/csv")
-            else:
-                # For larger files, use resumable upload with proper chunk size
-                with open(file_path, "rb") as f:
-                    blob.upload_from_file(f, content_type="text/csv", size=chunk_size)
-
+            with open(file_path, "rb") as f:
+                blob.upload_from_file(f, content_type="text/csv")
             print(f"Successfully uploaded {file_path} to {destination_path}")
-
         except Exception as e:
             raise Exception(f"Error uploading CSV to {destination_path}: {str(e)}")
-        
+            
 
     def download_csv(self, gcp_path: str, local_path: str) -> None:
         """

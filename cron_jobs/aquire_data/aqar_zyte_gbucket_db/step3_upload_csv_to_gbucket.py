@@ -2,7 +2,6 @@ from datetime import datetime
 import sys
 import os
 from typing import List
-import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 import json
 from common_methods import GCPBucketManager
