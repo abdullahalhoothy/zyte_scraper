@@ -5,16 +5,19 @@ import os
 import random
 from base64 import b64decode, b64encode
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Any, List, Union
-from common_methods import GCPBucketManager, upload_json_to_gcp
-import psycopg2
-from cron_jobs.aqar_zyte_gbucket_db.store_json_into_db import save_to_db
+from cron_jobs.aqar_zyte_gbucket_db.load_config import CONF
 
 import aiofiles
 import aiohttp
 
-from cron_jobs.aqar_zyte_gbucket_db.aqar_html_parsers import get_last_page, extract_listing_hrefs, extract_all_data
+from cron_jobs.aqar_zyte_gbucket_db.utils.aqar_html_parsers import get_last_page, extract_listing_hrefs, extract_all_data
+
+class RequestError(Exception):
+    pass
+
+
+
 
 
 def setup_logger():
@@ -39,59 +42,8 @@ def setup_logger():
 logger = setup_logger()
 
 
-class RequestError(Exception):
-    pass
-
-
-@dataclass
-class ScraperConfig:
-    api_key: str
-    zyte_api_url: str
-    base_url_info: dict
-    listing_regex: str
-    expected_listing_count: int
-    pages_to_scrape_per_worker: tuple
-    max_concurrent_requests: int
-    pages_to_crawl_per_worker: tuple
-    last_page_check_number: int
-    last_page_regex: str
-    crawling_progress_file_name: str
-    response_data_file_name: str
-    irregular_pages_file: str
-    crawling_delay: tuple
-    scraping_delay: tuple
-
 
 # Load configuration from a JSON file
-def load_config(file_path="secret_config.json"):
-    with open(file_path, "r") as config_file:
-        return json.load(config_file)
-
-
-CONF = ScraperConfig(
-    api_key=load_config()["api_key"],
-    zyte_api_url="https://api.zyte.com/v1/extract",
-    base_url_info={
-        "shaqra_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%B4%D9%82%D8%B1%D8%A7%D8%A1",
-        "sqdiq_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AB%D8%A7%D8%AF%D9%82",
-        # "riyadh_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6",
-        # Add more base URLs here
-    },
-    listing_regex=r'href="(/\d+/.*?)"',
-    expected_listing_count=20,
-    max_concurrent_requests=1,
-    pages_to_scrape_per_worker=(8, 14),
-    pages_to_crawl_per_worker=(1, 1),
-    last_page_check_number=999,
-    last_page_regex=r"/(\d+)$",
-    crawling_progress_file_name="progress.json",
-    response_data_file_name="response_data.json",
-    irregular_pages_file="irregular_pages.json",
-    crawling_delay=(1, 5),
-    scraping_delay=(1, 5),
-)
-
-
 class FileLock:
     def __init__(self):
         self.locks = {}
@@ -458,45 +410,45 @@ async def crawl_and_process(semaphore, client, base_url, dir_name, worker_id):
 
 
 async def main():
-    config = load_config()
+    
     semaphore = asyncio.Semaphore(CONF.max_concurrent_requests)
     connector = aiohttp.TCPConnector(limit_per_host=CONF.max_concurrent_requests)
     async with aiohttp.ClientSession(connector=connector) as client:
         tasks = []
-        # for worker_id, (dir_name, url) in enumerate(CONF.base_url_info.items(), start=0):
-        #     os.makedirs(dir_name, exist_ok=True)
-        #     await initialize_base_url_if_new(client, dir_name, url)
-        #     task = asyncio.create_task(
-        #         crawl_and_process(semaphore, client, url, dir_name, worker_id),
-        #         name=f"Worker-{worker_id}"
-        #     )
-        #     tasks.append(task)
+        for worker_id, (dir_name, url) in enumerate(CONF.base_url_info.items(), start=0):
+            os.makedirs(dir_name, exist_ok=True)
+            await initialize_base_url_if_new(client, dir_name, url)
+            task = asyncio.create_task(
+                crawl_and_process(semaphore, client, url, dir_name, worker_id),
+                name=f"Worker-{worker_id}"
+            )
+            tasks.append(task)
 
-        # results = await asyncio.gather(*tasks, return_exceptions=True)
-        # for result in results:
-        #     if isinstance(result, Exception):
-        #         logger.error(f"Task failed with exception: {result}")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Task failed with exception: {result}")
 
-        # Initialize GCP manager once
-        gcp_manager = GCPBucketManager(
-            bucket_name=config["bucket_name"], credentials_path=config["cred_path"]
-        )
-        conn = psycopg2.connect(
-            dbname="aqar_scraper",
-            user="scraper_user",
-            password="scraper_password",
-            host="s-locator.northernacs.com",
-            port="5432",
-        )
-        # First upload to GCP
-        directories = list(CONF.base_url_info.keys())
-        upload_success = upload_json_to_gcp(directories, gcp_manager)
-        if not upload_success:
-            print("Warning: Failed to upload files to GCP bucket")
+        # # Initialize GCP manager once
+        # gcp_manager = GCPBucketManager(
+        #     bucket_name=config["bucket_name"], credentials_path=config["cred_path"]
+        # )
+        # conn = psycopg2.connect(
+        #     dbname="aqar_scraper",
+        #     user="scraper_user",
+        #     password="scraper_password",
+        #     host="s-locator.northernacs.com",
+        #     port="5432",
+        # )
+        # # First upload to GCP
+        # directories = list(CONF.base_url_info.keys())
+        # upload_success = upload_json_to_gcp(directories, gcp_manager)
+        # if not upload_success:
+        #     print("Warning: Failed to upload files to GCP bucket")
 
 
 
-        save_to_db(directories, conn)
+        # save_to_db(directories, conn)
 
         logger.info("FINISHED SUCCESS----")
 

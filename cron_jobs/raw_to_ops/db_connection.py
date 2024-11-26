@@ -4,17 +4,22 @@ import json
 import os
 
 class DatabaseConnection:
-    def __init__(self, config_path):
-        self.config = self._load_config(config_path)
+    def __init__(self, config):
+        self.config = self._load_config(config)
         self.conn = None
 
-    def _load_config(self, config_path):
+    def _load_config(self, config):
         """Load database configuration from JSON file"""
         try:
-            with open(config_path, "r") as f:
-                return json.load(f)
+            # if config is string load as path , else if use config object
+            if isinstance(config,str):
+                with open(config, "r") as f:
+                    return json.load(f)
+            else:
+                return config
+
         except FileNotFoundError:
-            raise FileNotFoundError(f"Configuration file not found at {config_path}")
+            raise FileNotFoundError(f"Configuration file not found at {config}")
         except json.JSONDecodeError:
             raise ValueError("Invalid JSON in configuration file")
 

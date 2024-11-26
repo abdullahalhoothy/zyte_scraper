@@ -247,22 +247,30 @@ def create_database_structure(conn, df, db_name, schema, table_name):
 
 
 def insert_data_into_table(conn, df, table_name, schema):
-
+    # First, analyze DataFrame to determine which columns need BIGINT
+    columns_to_alter = []
+    for col in df.columns:
+        if df[col].dtype in ['int64', 'float64']:
+            # Check if any value exceeds PostgreSQL integer limits
+            max_val = df[col].max()
+            min_val = df[col].min()
+            if max_val > 2147483647 or min_val < -2147483648:
+                columns_to_alter.append(col)
+                
     buffer = StringIO()
     df.to_csv(buffer, index=False, header=False, sep="\t", na_rep="\\N")
     buffer.seek(0)
-
+    
     with conn.cursor() as cursor:
         try:
             # Create a temporary table
             temp_table = f"temp_{table_name}"
-
             # Drop temp table if it exists
             drop_temp = sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
                 sql.Identifier(schema), sql.Identifier(temp_table)
             )
             cursor.execute(drop_temp)
-
+            
             # Create temp table with same structure
             create_temp = sql.SQL("CREATE TABLE {}.{} (LIKE {}.{})").format(
                 sql.Identifier(schema),
@@ -271,20 +279,30 @@ def insert_data_into_table(conn, df, table_name, schema):
                 sql.Identifier(table_name),
             )
             cursor.execute(create_temp)
-
+            
+            # Alter column types to BIGINT where needed
+            for column in columns_to_alter:
+                alter_column = sql.SQL("""
+                    ALTER TABLE {}.{} 
+                    ALTER COLUMN {} TYPE BIGINT
+                """).format(
+                    sql.Identifier(schema),
+                    sql.Identifier(temp_table),
+                    sql.Identifier(column)
+                )
+                cursor.execute(alter_column)
+            
             # Insert into temp table
             qualified_temp_table = sql.SQL("{}.{}").format(
                 sql.Identifier(schema), sql.Identifier(temp_table)
             )
-
             columns = sql.SQL(", ").join(sql.Identifier(col) for col in df.columns)
-
             copy_cmd = sql.SQL(
                 "COPY {} ({}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')"
             ).format(qualified_temp_table, columns)
-
+            cursor.execute("SET client_encoding TO 'UTF8'")  # Handle special characters
             cursor.copy_expert(copy_cmd, buffer)
-
+            
             # Swap tables
             old_table = f"old_{table_name}"
             rename_commands = [
@@ -305,16 +323,14 @@ def insert_data_into_table(conn, df, table_name, schema):
                     sql.Identifier(schema), sql.Identifier(old_table)
                 ),
             ]
-
             for cmd in rename_commands:
                 cursor.execute(cmd)
-
             print(f"Table {schema}.{table_name} replaced with {len(df)} new rows")
-
+            if columns_to_alter:
+                print(f"Columns converted to BIGINT: {', '.join(columns_to_alter)}")
         except Exception as e:
             print(f"Error during copy to {schema}.{table_name}: {e}")
             raise
-
 
 def insert_image_metadata(conn, schema, table_name, image_data):
     with conn.cursor() as cursor:
@@ -332,7 +348,7 @@ def insert_image_metadata(conn, schema, table_name, image_data):
         execute_values(cursor, insert_query, image_data)
 
 
-def list_files_in_bucket_structure(gcp):
+def list_csv_files_in_bucket(gcp):
     structure = {"csv": {}, "images": {}}
     blobs = list(gcp.bucket.list_blobs())
     for blob in blobs:
@@ -377,13 +393,16 @@ def read_and_merge_csv_files(slocator_gcp, file_paths):
     return pd.concat(dataframes, ignore_index=True)
 
 
-def process_all_pipelines(config):
+def process_all_pipelines():
     """Process all pipeline configurations"""
-    for pipeline_name, pipeline_config in config["pipelines"].items():
+    with open("cron_jobs/secrets_database.json", "r") as f:
+        config = json.load(f)
+
+    for pipeline_name, pipeline_config in config.items():
         # Skip incomplete configurations
         if (
-            not pipeline_config["bucket"]["credentials_path"]
-            or not pipeline_config["db"]["host"]
+            not pipeline_config["bucket"]["credentials_path"] or 
+            not pipeline_config["db"]["host"]
         ):
             print(f"Skipping {pipeline_name}: Incomplete configuration")
             continue
@@ -398,7 +417,7 @@ def process_all_pipelines(config):
             )
 
             # Get the file structure
-            structure = list_files_in_bucket_structure(gcp_manager)
+            structure = list_csv_files_in_bucket(gcp_manager)
 
             # Skip if no files found
             if not structure["csv"] and not structure["images"]:
@@ -416,13 +435,5 @@ def process_all_pipelines(config):
             print(f"Error processing pipeline {pipeline_name}: {e}")
             continue
 
-def main():
-    try:
-        with open("cron_jobs/gbucket_to_db/secrets_database.json", "r") as f:
-            config = json.load(f)
 
-        process_all_pipelines(config)
-
-    except Exception as e:
-        print(f"Fatal error: {e}")
-        sys.exit(1)
+process_all_pipelines()

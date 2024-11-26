@@ -1,31 +1,33 @@
-from datetime import datetime
 from google.cloud import storage
 from google.oauth2 import service_account
 import json
 from typing import Optional, Dict, Any, List
 import os
-import glob
+import sys
+
 
 class GCPBucketManager:
     def __init__(self, bucket_name: str, credentials_path: str):
         """
         Initialize GCP Bucket connection
-        
+
         Args:
             bucket_name (str): Name of the GCP bucket
             credentials_path (str): Path to service account JSON credentials file
         """
-        self.credentials = service_account.Credentials.from_service_account_file(credentials_path)
+        self.credentials = service_account.Credentials.from_service_account_file(
+            credentials_path
+        )
         self.storage_client = storage.Client(credentials=self.credentials)
         self.bucket = self.storage_client.bucket(bucket_name)
 
     def list_files(self, prefix: Optional[str] = None) -> List[str]:
         """
         List all files in bucket, optionally filtered by prefix
-        
+
         Args:
             prefix (str, optional): Filter files by prefix/folder path
-            
+
         Returns:
             List[str]: List of file names in the bucket
         """
@@ -35,10 +37,10 @@ class GCPBucketManager:
     def read_json(self, file_path: str) -> Dict[str, Any]:
         """
         Read JSON file from bucket
-        
+
         Args:
             file_path (str): Path to file in bucket
-            
+
         Returns:
             dict: Parsed JSON data
         """
@@ -49,13 +51,11 @@ class GCPBucketManager:
         except Exception as e:
             raise Exception(f"Error reading JSON from {file_path}: {str(e)}")
 
-
-    def save_json(self, data: dict, file_path: str) -> None:
+    def upload_json(self, data: dict, file_path: str) -> None:
         try:
             blob = self.bucket.blob(file_path)
             blob.upload_from_string(
-                json.dumps(data, indent=2),
-                content_type='application/json'
+                json.dumps(data, indent=2), content_type="application/json"
             )
             print(f"Successfully saved JSON to {file_path}")
         except Exception as e:
@@ -64,10 +64,10 @@ class GCPBucketManager:
     def read_file_as_bytes(self, file_path: str) -> bytes:
         """
         Read any file as bytes from bucket
-        
+
         Args:
             file_path (str): Path to file in bucket
-            
+
         Returns:
             bytes: File content as bytes
         """
@@ -78,40 +78,46 @@ class GCPBucketManager:
             raise Exception(f"Error reading file {file_path}: {str(e)}")
 
 
-def upload_json_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) -> bool:
-    """
-    Upload JSON files to Google Cloud Storage bucket using provided GCPBucketManager instance
-    """
-    try:
-        # Get current timestamp for folder organization
-        base_path = 'postgreSQL/dbo_opertional/raw_schema-marketplace/real_estate'
-        date = datetime.now().strftime("%Y%m%d")
+    def upload_csv(
+        self, file_path: str, destination_path: str, chunk_size: int = 262144
+    ) -> None:
+        """
+        Upload a CSV file to GCP bucket in a memory-efficient way using chunked upload.
 
-        for directory in directories:
-            # Get all JSON files in the directory
-            json_files = glob.glob(os.path.join(directory, "*.json"))
+        Args:
+            file_path (str): Local path to CSV file
+            destination_path (str): Destination path in bucket
+            chunk_size (int): Size of chunks for upload in bytes (default 256KB to meet GCS requirements)
+        """
+        try:
+            blob = self.bucket.blob(destination_path)
 
-            for json_file in json_files:
-                try:
-                    # Read JSON file
-                    with open(json_file, "r", encoding="utf-8") as f:
-                        json_data = json.load(f)
+            # For small files, use simple upload
+            if os.path.getsize(file_path) < chunk_size:
+                with open(file_path, "rb") as f:
+                    blob.upload_from_file(f, content_type="text/csv")
+            else:
+                # For larger files, use resumable upload with proper chunk size
+                with open(file_path, "rb") as f:
+                    blob.upload_from_file(f, content_type="text/csv", chunk_size=chunk_size)
 
-                    # Create GCS path: bucket/timestamp/database/schema/table/file.json
-                    file_name = os.path.basename(json_file)
-                    gcs_path = f"{base_path}/{directory}/{date}/raw_data/{file_name}"
+            print(f"Successfully uploaded {file_path} to {destination_path}")
 
-                    # Upload file to GCS using our manager
-                    gcp_manager.save_json(json_data, gcs_path)
+        except Exception as e:
+            raise Exception(f"Error uploading CSV to {destination_path}: {str(e)}")
+        
 
-                    print(f"Successfully uploaded {json_file} to {gcs_path}")
-
-                except Exception as file_error:
-                    print(f"Error uploading file {json_file}: {str(file_error)}")
-                    continue
-
-        return True
-
-    except Exception as e:
-        print(f"Error in GCP upload: {str(e)}")
-        return False
+    def download_csv(self, gcp_path: str, local_path: str) -> None:
+        """
+        Download a CSV file from GCP bucket.
+        
+        Args:
+            gcp_path (str): Path to file in bucket
+            local_path (str): Local path to save file
+        """
+        try:
+            blob = self.bucket.blob(gcp_path)
+            blob.download_to_filename(local_path)
+            print(f"Successfully downloaded {gcp_path} to {local_path}")
+        except Exception as e:
+            raise Exception(f"Error downloading CSV from {gcp_path}: {str(e)}")
