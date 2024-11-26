@@ -94,5 +94,5 @@ def create_table_banners():
 def transformation_banners():
     return """
     INSERT INTO schema_app_generic.banners
-    SELECT * FROM schema_app_generic.banners;
+    SELECT * FROM raw_schema_app_generic.banners;
     """
