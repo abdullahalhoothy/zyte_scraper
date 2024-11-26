@@ -22,7 +22,7 @@ def download_csv_from_gcp(directories: List[str], gcp_manager: GCPBucketManager,
         bool: True if successful, False otherwise
     """
     try:
-        base_path = "postgreSQL/dbo_operational/raw_schema-marketplace/real_estate"
+        base_path = "postgreSQL/dbo_operational/raw_schema_marketplace/real_estate"
         
         # If date not specified, get the latest date from GCP
         if not date:

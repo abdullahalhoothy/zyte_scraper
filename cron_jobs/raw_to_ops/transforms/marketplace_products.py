@@ -2,10 +2,10 @@
 def get_create_table_query():
     return """
     -- Create schema if it doesn't exist
-    CREATE SCHEMA IF NOT EXISTS "schema-marketplace";
+    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
     
     -- Create table if it doesn't exist
-    CREATE TABLE IF NOT EXISTS "schema-marketplace".products (
+    CREATE TABLE IF NOT EXISTS schema_marketplace.products (
         id TEXT PRIMARY KEY NOT NULL,
         name varchar(500) NOT NULL,
         description text NULL,
@@ -23,7 +23,7 @@ def get_create_table_query():
     );
 
     -- Truncate the table to ensure clean data
-    TRUNCATE TABLE "schema-marketplace".products;
+    TRUNCATE TABLE schema_marketplace.products;
     """
 
 def get_transformation_query():
@@ -50,9 +50,9 @@ WITH product_data AS (
             "username": "Default Reviewer",
             "userimageurl": "default_image_url"
         }'::jsonb as userRating
-    FROM "raw_schema-marketplace".products
+    FROM raw_schema_marketplace.products
     )
-    INSERT INTO "schema-marketplace".products
+    INSERT INTO schema_marketplace.products
     SELECT 
         id,
         name,
@@ -78,21 +78,21 @@ WITH product_data AS (
 def create_table_banners():
     return """
     -- Create schema if it doesn't exist
-    CREATE SCHEMA IF NOT EXISTS "schema-app_generic";
+    CREATE SCHEMA IF NOT EXISTS schema_app_generic;
     
     -- Create table if it doesn't exist
-    CREATE TABLE IF NOT EXISTS "schema-app_generic".banners (
+    CREATE TABLE IF NOT EXISTS schema_app_generic.banners (
         id TEXT PRIMARY KEY NOT NULL,
         file_name varchar(500) NOT NULL,
         url varchar(500) NULL
     );
 
     -- Truncate the table to ensure clean data
-    TRUNCATE TABLE "schema-app_generic".banners;
+    TRUNCATE TABLE schema_app_generic.banners;
     """
 
 def transformation_banners():
     return """
-    INSERT INTO "schema-app_generic".banners
-    SELECT * FROM "schema-app_generic".banners;
+    INSERT INTO schema_app_generic.banners
+    SELECT * FROM schema_app_generic.banners;
     """

@@ -16,7 +16,7 @@ def upload_json_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) ->
     """
     try:
         # Get current timestamp for folder organization
-        base_path = "postgreSQL/dbo_operational/raw_schema-marketplace/real_estate"
+        base_path = "postgreSQL/dbo_operational/raw_schema_marketplace/real_estate"
         date = datetime.now().strftime("%Y%m%d")
 
         for directory in directories:
@@ -53,7 +53,7 @@ def upload_csv_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) -> 
     Upload CSV files to Google Cloud Storage bucket using provided GCPBucketManager instance
     """
     try:
-        base_path = "postgreSQL/dbo_operational/raw_schema-marketplace/real_estate"
+        base_path = "postgreSQL/dbo_operational/raw_schema_marketplace/real_estate"
         date = datetime.now().strftime("%Y%m%d")
         
         for directory in directories:
