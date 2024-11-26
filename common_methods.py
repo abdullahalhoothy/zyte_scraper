@@ -99,7 +99,7 @@ class GCPBucketManager:
             else:
                 # For larger files, use resumable upload with proper chunk size
                 with open(file_path, "rb") as f:
-                    blob.upload_from_file(f, content_type="text/csv", chunk_size=chunk_size)
+                    blob.upload_from_file(f, content_type="text/csv", size=chunk_size)
 
             print(f"Successfully uploaded {file_path} to {destination_path}")
 

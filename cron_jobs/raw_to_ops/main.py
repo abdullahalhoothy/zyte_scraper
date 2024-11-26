@@ -2,24 +2,34 @@ import sys
 import os
 import json
 from db_connection import DatabaseConnection
-from transforms import AVAILABLE_TRANSFORMS
+import importlib.util
+import inspect
 
+def get_module_functions(module_name: str, base_path: str = "cron_jobs/raw_to_ops/transforms"):
+    full_path = os.path.join(base_path, f"{module_name}.py")
+    spec = importlib.util.spec_from_file_location(module_name, full_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    
+    functions = [
+        obj for name, obj in inspect.getmembers(module)
+        if inspect.isfunction(obj) and obj.__module__ == module.__name__
+    ]
+    
+    return functions
 
 def apply_transformation(db_conn, transform_name):
     """Apply a specific transformation"""
     try:
-        if transform_name not in AVAILABLE_TRANSFORMS:
-            raise ValueError(f"Unknown transformation: {transform_name}")
+        # if transform_name not in AVAILABLE_TRANSFORMS:
+        #     raise ValueError(f"Unknown transformation: {transform_name}")
 
-        transform_functions = AVAILABLE_TRANSFORMS[transform_name]
-
-        # Create table
-        create_table_query = transform_functions["create_table"]()
-        db_conn.execute_query(create_table_query)
-
-        # Apply transformation
-        transform_query = transform_functions["transform"]()
-        db_conn.execute_query(transform_query)
+        # transform_functions = AVAILABLE_TRANSFORMS[transform_name]
+        functions = get_module_functions(transform_name)
+        for func in functions:
+            query = func()
+            db_conn.execute_query(query)
+            print(f"Successfully applied function: {func.__name__}")
 
         print(f"Successfully applied transformation: {transform_name}")
 
@@ -34,7 +44,7 @@ def main():
             config = json.load(f)
 
         transfos = {
-            "s-locator": ["dbo_opertional@marketplace_slocator"],
+            "s-locator": ["dbo_operational@marketplace_slocator"],
             "vivi_app": [
                 "dbo-coffee@marketplace_products",
                 # Add other transformations here as needed
