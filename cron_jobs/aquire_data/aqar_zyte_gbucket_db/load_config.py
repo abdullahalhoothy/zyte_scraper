@@ -3,10 +3,34 @@ import json
 
 
 
-def load_config(file_path="cron_jobs/aquire_data/aqar_zyte_gbucket_db/secret_config.json"):
+def load_config(file_path="secret_config.json"):
     with open(file_path, "r") as config_file:
         return json.load(config_file)
 
+def create_links_to_scrap() -> dict:
+    
+    cities = {
+        "baqa":"%D8%A8%D9%82%D8%B9%D8%A7%D8%A1"
+        # "jazan":"%D8%AC%D8%A7%D8%B2%D8%A7%D9%86",
+        # "riydah":"%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA"
+    }
+    
+    
+    categories = {
+        "land_sale":"%D8%A3%D8%B1%D8%A7%D8%B6%D9%8A-%D9%84%D9%84%D8%A8%D9%8A%D8%B9",
+        "villa_allrooms":"%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9"
+    }
+    
+    
+    output = {
+        
+    }
+    
+    for city,city_coded_name in cities.items():
+        for category,category_coded_name in categories.items():
+            output[city+'_'+category] = "https://sa.aqar.fm/"+category_coded_name+'/'+city_coded_name
+    
+    return output
 
 @dataclass
 class ScraperConfig:
@@ -30,12 +54,7 @@ class ScraperConfig:
 CONF = ScraperConfig(
     api_key=load_config()["api_key"],
     zyte_api_url="https://api.zyte.com/v1/extract",
-    base_url_info={
-        "shaqra_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%B4%D9%82%D8%B1%D8%A7%D8%A1",
-        "copyshaqra_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AB%D8%A7%D8%AF%D9%82",
-        # "riyadh_villa_allrooms": "https://sa.aqar.fm/%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6",
-        # Add more base URLs here
-    },
+    base_url_info=create_links_to_scrap(),
     listing_regex=r'href="(/\d+/.*?)"',
     expected_listing_count=20,
     max_concurrent_requests=1,
