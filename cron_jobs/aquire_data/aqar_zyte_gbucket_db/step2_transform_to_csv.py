@@ -263,7 +263,6 @@ def get_all_keys(directory, num_files=50):
 
 def save_to_csv(directories):
     
-    print(directories)
     for directory in directories:
         # Get all keys from the first 50 files
         dir_path = os.path.dirname(os.path.abspath(__file__)) + "/" + directory
