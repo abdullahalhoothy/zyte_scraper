@@ -3,7 +3,7 @@ import time
 import asyncio
 
 from cron_jobs.aquire_data.aqar_zyte_gbucket_db.step1_zyte_aqar import main as zyte_aqar_runner
-from cron_jobs.gbucket_to_db.main import main as gbucket_to_db_runner
+from cron_jobs.gbucket_to_db.step4 import main as gbucket_to_db_runner
 
 
 def my_task():

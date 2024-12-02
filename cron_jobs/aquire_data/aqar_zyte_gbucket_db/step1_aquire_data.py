@@ -429,26 +429,5 @@ async def main():
             if isinstance(result, Exception):
                 logger.error(f"Task failed with exception: {result}")
 
-        # # Initialize GCP manager once
-        # gcp_manager = GCPBucketManager(
-        #     bucket_name=config["bucket_name"], credentials_path=config["cred_path"]
-        # )
-        # conn = psycopg2.connect(
-        #     dbname="aqar_scraper",
-        #     user="scraper_user",
-        #     password="scraper_password",
-        #     host="s-locator.northernacs.com",
-        #     port="5432",
-        # )
-        # # First upload to GCP
-        # directories = list(CONF.base_url_info.keys())
-        # upload_success = upload_json_to_gcp(directories, gcp_manager)
-        # if not upload_success:
-        #     print("Warning: Failed to upload files to GCP bucket")
-
-
-
-        # save_to_db(directories, conn)
-
         logger.info("FINISHED SUCCESS----")
 

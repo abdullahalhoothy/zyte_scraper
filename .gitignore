@@ -13,7 +13,7 @@ storage/postgres/sql_logs/**
 /node_modules
 /archive/**
 /riyadh_villa_allrooms/**
-
+**/ignore*
 
 .DS_Store
 

@@ -4,6 +4,8 @@ import json
 from typing import Optional, Dict, Any, List
 import os
 import sys
+import glob
+from datetime import datetime
 
 
 class GCPBucketManager:
@@ -77,10 +79,7 @@ class GCPBucketManager:
         except Exception as e:
             raise Exception(f"Error reading file {file_path}: {str(e)}")
 
-
-    def upload_csv(
-        self, file_path: str, destination_path: str
-    ) -> None:
+    def upload_csv(self, file_path: str, destination_path: str) -> None:
         """
         Upload a CSV file to GCP bucket.
         Args:
@@ -94,12 +93,11 @@ class GCPBucketManager:
             print(f"Successfully uploaded {file_path} to {destination_path}")
         except Exception as e:
             raise Exception(f"Error uploading CSV to {destination_path}: {str(e)}")
-            
 
     def download_csv(self, gcp_path: str, local_path: str) -> None:
         """
         Download a CSV file from GCP bucket.
-        
+
         Args:
             gcp_path (str): Path to file in bucket
             local_path (str): Local path to save file

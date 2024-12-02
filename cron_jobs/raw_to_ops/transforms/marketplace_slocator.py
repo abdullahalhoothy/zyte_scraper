@@ -145,3 +145,45 @@ def population():
     FROM ranked_data
     WHERE rn = 1;
     """   
+
+def canada_census():
+    return """
+    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
+    
+    CREATE TABLE IF NOT EXISTS schema_marketplace.canada_census (
+        da_id TEXT NOT NULL,
+        population_2021 NUMERIC NULL,
+        total_private_dwellings_2021 NUMERIC NULL,
+        private_dwellings_occupied_by_usual_residents_2021 NUMERIC NULL,
+        land_area_in_square_kilometres_2021 NUMERIC NULL,
+        population_density_per_square_kilometre_2021 NUMERIC NULL,
+        province TEXT NULL,
+        longitude NUMERIC NULL,
+        latitude NUMERIC NULL
+    );
+    
+    TRUNCATE TABLE schema_marketplace.canada_census;
+    
+    INSERT INTO schema_marketplace.canada_census (
+        da_id,
+        population_2021,
+        total_private_dwellings_2021,
+        private_dwellings_occupied_by_usual_residents_2021,
+        land_area_in_square_kilometres_2021,
+        population_density_per_square_kilometre_2021,
+        province,
+        longitude,
+        latitude
+    )
+    SELECT
+        da_id,
+        population_2021,
+        total_private_dwellings_2021,
+        private_dwellings_occupied_by_usual_residents_2021,
+        land_area_in_square_kilometres_2021,
+        population_density_per_square_kilometre_2021,
+        province,
+        longitude,
+        latitude
+    FROM raw_schema_marketplace.canada_census;
+    """
