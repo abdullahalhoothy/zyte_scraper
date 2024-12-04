@@ -6,12 +6,12 @@ import random
 from base64 import b64decode, b64encode
 from contextlib import asynccontextmanager
 from typing import Any, List, Union
-from cron_jobs.aquire_data.aqar_zyte_gbucket_db.load_config import CONF
+from load_config import CONF
 
 import aiofiles
 import aiohttp
 
-from cron_jobs.aquire_data.aqar_zyte_gbucket_db.utils.aqar_html_parsers import get_last_page, extract_listing_hrefs, extract_all_data
+from utils.aqar_html_parsers import get_last_page, extract_listing_hrefs, extract_all_data
 
 class RequestError(Exception):
     pass
@@ -409,14 +409,15 @@ async def crawl_and_process(semaphore, client, base_url, dir_name, worker_id):
     # logger.info(f"Worker {worker_id} completed all tasks for {base_url}")
 
 
-async def main():
+async def aquire_data():
     
+    main_folder_path = "./cron_jobs/aquire_data/aqar_zyte_gbucket_db"
     semaphore = asyncio.Semaphore(CONF.max_concurrent_requests)
     connector = aiohttp.TCPConnector(limit_per_host=CONF.max_concurrent_requests)
     async with aiohttp.ClientSession(connector=connector) as client:
         tasks = []
         for worker_id, (dir_name, url) in enumerate(CONF.base_url_info.items(), start=0):
-            os.makedirs(dir_name, exist_ok=True)
+            os.makedirs(main_folder_path+'/'+dir_name, exist_ok=True)
             await initialize_base_url_if_new(client, dir_name, url)
             task = asyncio.create_task(
                 crawl_and_process(semaphore, client, url, dir_name, worker_id),

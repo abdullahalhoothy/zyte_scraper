@@ -20,7 +20,7 @@ def upload_json_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) ->
 
         for directory in directories:
             # Get all JSON files in the directory
-            json_files = glob.glob(os.path.join(os.path.dirname(__file__) +"\\"+ directory, "*.json"))
+            json_files = glob.glob(os.path.join(os.path.dirname(__file__) +"/"+ directory, "*.json"))
 
             for json_file in json_files:
                 try:
@@ -56,16 +56,23 @@ def upload_csv_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) -> 
         date = datetime.now().strftime("%Y%m%d")
         
         for directory in directories:
-            csv_files = glob.glob(os.path.join(os.path.dirname(__file__) + "\\" + directory, "*.csv"))
+            csv_files = glob.glob(os.path.join(os.path.dirname(__file__) + "/" + directory, "*.csv"))
             
             for csv_file in csv_files:
 
-                file_name = os.path.basename(csv_file)
-                gcs_path = f"{base_path}/{directory}/{date}/{file_name}"
+                try:
                 
-                # Direct file upload without DataFrame conversion
-                gcp_manager.upload_csv(csv_file, gcs_path)
+                    file_name = os.path.basename(csv_file)
+                    gcs_path = f"{base_path}/{directory}/{date}/{file_name}"
                     
+                    # Direct file upload without DataFrame conversion
+                    gcp_manager.upload_csv(csv_file, gcs_path)
+                    
+                    print(f"Successfully uploaded {csv_file} to {gcs_path}")
+
+                except Exception as file_error:
+                    print(f"Error uploading file {csv_file}: {str(file_error)}")
+                    continue
                     
         return True
         
@@ -73,13 +80,21 @@ def upload_csv_to_gcp(directories: List[str], gcp_manager: GCPBucketManager) -> 
         print(f"Error in GCP upload: {str(e)}")
         return False
 
-config = load_config()
 
-# Initialize GCP manager once
-gcp_manager = GCPBucketManager(
-    bucket_name=config["bucket_name"], credentials_path=config["cred_path"]
-)
 
-directories = list(CONF.base_url_info.keys())
-upload_success = upload_csv_to_gcp(directories, gcp_manager)
 
+def upload_csv():
+    config = load_config()
+    # Initialize GCP manager once
+    gcp_manager = GCPBucketManager(
+        bucket_name=config["bucket_name"], credentials_path=config["cred_path"]
+    )
+    directories = list(CONF.base_url_info.keys())
+    upload_success = upload_csv_to_gcp(directories, gcp_manager)
+
+
+
+    if upload_success:
+        print("Uploaded Data to GCP successfully")
+    else:
+        print("Failture in uploading data to GCP")
