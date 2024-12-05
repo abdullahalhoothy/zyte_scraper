@@ -87,7 +87,7 @@ def flatten_json(y):
 
 
 def process_and_filter_data(directory, all_keys, num_files=350):
-    dir_path = os.path.dirname(os.path.abspath(__file__)) + "\\" + directory
+    dir_path = os.path.dirname(os.path.abspath(__file__)) + "/" + directory
     df_save_path = os.path.join(dir_path, "processed_dataframe.pkl")
     all_col_names_path = os.path.join(dir_path, "process_and_filter_data.json")
 
@@ -156,7 +156,9 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         ]
     )
 
-    df = df[columns_to_keep]
+    available_columns = [col for col in columns_to_keep if col in df.columns]
+    if available_columns:
+        df = df[available_columns]
 
     # Drop columns with 'video' or 'img' in the name
     print("Dropping columns with 'video' or 'img' in the name...")
@@ -165,15 +167,16 @@ def process_and_filter_data(directory, all_keys, num_files=350):
 
     # Drop columns where more than 50% of values contain more than 3 '/' or '\'
     print("Dropping columns with excessive slashes...")
-    slash_mask = np.vectorize(lambda x: str(x).count("/") + str(x).count("\\") > 3)(
-        df.values
-    )
-    slash_cols = df.columns[np.mean(slash_mask, axis=0) > 0.5]
-    https_mask = np.vectorize(lambda x: str(x).startswith("https:"))(
-        df[slash_cols].values
-    )
-    slash_cols = slash_cols[~np.any(https_mask, axis=0)]
-    df = df.drop(columns=slash_cols)
+    if not df.empty:
+        slash_mask = np.vectorize(lambda x: str(x).count("/") + str(x).count("\\") > 3)(
+            df.values
+        )
+        slash_cols = df.columns[np.mean(slash_mask, axis=0) > 0.5]
+        https_mask = np.vectorize(lambda x: str(x).startswith("https:"))(
+            df[slash_cols].values
+        )
+        slash_cols = slash_cols[~np.any(https_mask, axis=0)]
+        df = df.drop(columns=slash_cols)
     if "additional_rops_pageProps_path_listing_id" in df.columns:
         print(
             "Dropping columns related to 'additional_rops_pageProps_path_listing_id'..."
@@ -190,8 +193,9 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         )
 
     # Keep only the columns that are in all_keys plus 'url'
-    print("Keeping only the required columns...")
-    df = df[["url"] + [col for col in all_keys if col in df.columns]]
+    if not df.empty:
+        print("Keeping only the required columns...")
+        df = df[["url"] + [col for col in all_keys if col in df.columns]]
     new_keep_cols = df.columns.tolist()
 
     # Sort the columns
@@ -207,7 +211,9 @@ def process_and_filter_data(directory, all_keys, num_files=350):
     re_nonspec_cols = list(
         set([col for col in sorted_new_keep_cols if "specifications" not in col])
     )
-    re_nonspec_cols.remove("url")
+
+    if "url" in re_nonspec_cols:
+        re_nonspec_cols.remove("url")
     # re_nonspec_cols.remove("price")
     sorted_new_keep_cols = ["url", "price"] + re_spec_cols + re_nonspec_cols
 
@@ -221,7 +227,7 @@ def process_and_filter_data(directory, all_keys, num_files=350):
 
 def get_all_keys(directory, num_files=50):
     all_col_names_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "\\" + "all_col_names.json"
+        os.path.dirname(os.path.abspath(__file__)) + "/" + "all_col_names.json"
     )
     if os.path.exists(all_col_names_path):
         with open(all_col_names_path, "r", encoding="utf-8") as file:
@@ -255,7 +261,7 @@ def get_all_keys(directory, num_files=50):
 def save_to_csv(directories):
     for directory in directories:
         # Get all keys from the first 50 files
-        dir_path = os.path.dirname(os.path.abspath(__file__)) + "\\" + directory
+        dir_path = os.path.dirname(os.path.abspath(__file__)) + "/" + directory
         all_keys = get_all_keys(directory)
 
         # Process and filter data to get the columns
@@ -293,10 +299,11 @@ def save_to_csv(directories):
         df = df[columns]
 
         # Save to CSV
-        df['city'] = dir_path.split("\\")[-1].split("_")[0]
-        csv_filename = dir_path + "\\" + "data.csv"
+        df['city'] = dir_path.split("/")[-1].split("_")[0]
+        csv_filename = dir_path + "/" + "data.csv"
         df.to_csv(csv_filename, index=False)
         print(f"Data saved to {csv_filename}")
 
 
-save_to_csv(CONF.base_url_info)
+def transform_to_csv():
+    save_to_csv(CONF.base_url_info)
