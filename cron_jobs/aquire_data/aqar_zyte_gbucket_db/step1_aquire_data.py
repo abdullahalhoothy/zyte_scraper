@@ -175,9 +175,9 @@ async def make_zyte_request(
                     error_detail = response_json.get("detail", "No detail provided")
                     raise RequestError(f"Error {status_code}: {error_detail}")
                 elif status_code in [429, 503, 520]:
-                    retry_after = int(response.headers.get("Retry-After", 2))
+                    retry_after = int(int(response.headers.get("Retry-After", 2))/4)
                     raise RequestError(
-                        f"Error {status_code}: Too many requests. Retry after {retry_after} seconds."
+                        f"Error {status_code}: {response_json} Retry after {retry_after} seconds."
                     )
                 else:
                     raise RequestError(f"Unexpected status code: {status_code}")
