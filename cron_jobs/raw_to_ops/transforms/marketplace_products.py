@@ -6,7 +6,7 @@ def get_create_table_query():
     
     -- Create table if it doesn't exist
     CREATE TABLE IF NOT EXISTS schema_marketplace.products (
-        id TEXT PRIMARY KEY NOT NULL,
+        product_id TEXT PRIMARY KEY NOT NULL,
         name varchar(500) NOT NULL,
         description text NULL,
         tagline text NULL,
@@ -54,7 +54,7 @@ WITH product_data AS (
     )
     INSERT INTO schema_marketplace.products
     SELECT 
-        id,
+        product_id,
         name,
         description,
         tagline,
