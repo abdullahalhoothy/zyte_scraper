@@ -9,3 +9,4 @@ google-auth
 schedule==1.2.2
 geopandas 
 zipfile36
+faker
