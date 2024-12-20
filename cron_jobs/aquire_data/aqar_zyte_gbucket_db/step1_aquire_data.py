@@ -7,18 +7,23 @@ from base64 import b64decode, b64encode
 from contextlib import asynccontextmanager
 from typing import Any, List, Union
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+)
 from cron_jobs.aquire_data.aqar_zyte_gbucket_db.load_config import CONF
-from cron_jobs.aquire_data.aqar_zyte_gbucket_db.utils.aqar_html_parsers  import get_last_page, extract_listing_hrefs, extract_all_data
+from cron_jobs.aquire_data.aqar_zyte_gbucket_db.utils.aqar_html_parsers import (
+    get_last_page,
+    extract_listing_hrefs,
+    extract_all_data,
+)
 
 import aiofiles
 import aiohttp
 
+
 class RequestError(Exception):
     pass
-
-
-
 
 
 def setup_logger():
@@ -41,7 +46,6 @@ def setup_logger():
 
 
 logger = setup_logger()
-
 
 
 # Load configuration from a JSON file
@@ -145,8 +149,9 @@ async def make_zyte_request(
                     "url": url,
                     "httpResponseBody": True,
                     # "ipType":"residential",
-                    # "geolocation":"CA",
-                    "echoData": url,
+                    "geolocation": "DE",
+                    "actions": [],
+                    # "echoData": url,
                     # "sessionContext": [], # don't know how to use it , but helps avoid bans
                     # "sessionContextParameters": "", # goes with the above
                 },
@@ -155,7 +160,6 @@ async def make_zyte_request(
             }
             logger.info(f"Attempting to make request to {url}")
             async with client.post(**request_params) as response:
-                logger.info(f"Request to {url} successful")
                 response_json = await response.json()
                 status_code = response.status
 
@@ -166,7 +170,7 @@ async def make_zyte_request(
                     if parsing_func is not None:
                         return_data = parsing_func(return_data)
                         save_data = return_data
-                    echodata = response_json.get("echoData", "")
+                    # echodata = response_json.get("echoData", "")
                     await use_json(response_data_file_path, keys=url, value=save_data)
                     logger.info(f"Successfully retrieved and saved response for {url}")
                     return return_data
@@ -175,7 +179,7 @@ async def make_zyte_request(
                     error_detail = response_json.get("detail", "No detail provided")
                     raise RequestError(f"Error {status_code}: {error_detail}")
                 elif status_code in [429, 503, 520]:
-                    retry_after = int(int(response.headers.get("Retry-After", 2))/4)
+                    retry_after = int(int(response.headers.get("Retry-After", 2)) / 4)
                     raise RequestError(
                         f"Error {status_code}: {response_json} Retry after {retry_after} seconds."
                     )
@@ -246,8 +250,11 @@ async def initialize_base_url_if_new(client, dir_name, base_url):
     response_data = await make_zyte_request(client, url, response_data_file_path)
     crawling_prog, _, _, _ = await fetch_crawling_prog(dir_name, base_url)
     if base_url not in crawling_prog:
+        last_page = get_last_page(response_data)
+        if last_page > 50:
+            last_page = 50
         crawling_prog[base_url] = {
-            "last_page": get_last_page(response_data),
+            "last_page": last_page,
             "crawled_pages": [],
         }
         await update_crawling_prog(
@@ -272,7 +279,9 @@ async def check_page_fully_scraped(selected_page, dir_name, base_url):
 
 
 async def process_listings(client, selected_page, dir_name):
-    logger.info(f"Scraping page={selected_page}")
+    city, category = dir_name.split("/")[-1].split('_', 1)
+    
+    logger.info(f"Scraping page={selected_page} for {city} - {category}")
     page_response_file = f"{dir_name}/{selected_page}_response_data.json"
     page_response_data = await use_json(page_response_file)
     all_listing_urls = [url for url, value in page_response_data.items() if value == ""]
@@ -286,21 +295,32 @@ async def process_listings(client, selected_page, dir_name):
     logger.info(
         f"beginning to scrape {len(random_sample)} urls of {len(all_listing_urls)} available urls"
     )
-    for url in random_sample:
+    
+    for idx, url in enumerate(random_sample, 1):
         try:
-
+            logger.info(
+                f"Crawling listing {idx}/{len(random_sample)} from page {selected_page} "
+                f"in {city} for category {category}"
+            )
             await make_zyte_request(
                 client, url, page_response_file, parsing_func=extract_all_data
             )
             delay = random.uniform(*CONF.scraping_delay)
             logger.info(
-                f"Successfully make_zyte_request sleeping for {delay:.2f} seconds"
+                f"Successfully crawled listing {idx}/{len(random_sample)} from page {selected_page}. "
+                f"Sleeping for {delay:.2f} seconds"
             )
             await asyncio.sleep(delay)
         except Exception as exce:
-            print(f"Error processing listing {url}: {str(exce)}")
-    logger.info(f"worked on {len(random_sample)} elements in page {selected_page}")
-
+            logger.error(
+                f"Error processing listing {idx}/{len(random_sample)} from page {selected_page} "
+                f"in {city} for category {category}: {str(exce)}"
+            )
+    
+    logger.info(
+        f"Completed processing {len(random_sample)} listings from page {selected_page} "
+        f"in {city} for category {category}"
+    )
 
 async def scrape_urls_of_page(client, base_url, dir_name, worker_id):
     _, _, pages_to_process, _ = await fetch_crawling_prog(dir_name, base_url)
@@ -382,48 +402,91 @@ async def crawl_page_batch(client, base_url, dir_name):
 
 
 async def crawl_and_process(semaphore, client, base_url, dir_name, worker_id):
-    logger.info(f"Worker {worker_id} started for {base_url}")
+    try:
+        # Get the last part of the base_url which contains city name
+        url_parts = base_url.split('/')
+        city_coded = url_parts[-1]
+        category_coded = url_parts[-2]
+        
+        # Convert from URL encoding back to normal text using the CONF.base_url_info mapping
+        for city_name, category_name in CONF.base_url_info.items():
+            if category_name == base_url:
+                city, category = city_name.split('_', 1)
+                break
+    except Exception as e:
+        logger.error(f"Error parsing city and category from URL: {e}")
+        city = "unknown_city"
+        category = "unknown_category"
+    
+    logger.info(f"Worker {worker_id} started processing {city} - {category}")
+    
     async with semaphore:
+        iteration_count = 0
         while True:
-            logger.info(f"Worker {worker_id} starting new iteration")
+            iteration_count += 1
+            logger.info(
+                f"Worker {worker_id} starting iteration {iteration_count} "
+                f"for {city} - {category}"
+            )
 
             # Crawl page batch
+            logger.info(
+                f"Worker {worker_id} beginning page batch crawl "
+                f"for {city} - {category}"
+            )
             status = await crawl_page_batch(client, base_url, dir_name)
             logger.info(
-                f"Worker {worker_id} completed crawl_page_batch with status: {status}"
+                f"Worker {worker_id} completed page batch crawl with status: {status} "
+                f"for {city} - {category}"
             )
-            #
+
             if status == "finished":
                 logger.info(
-                    f"Worker {worker_id} finished crawling all pages for {base_url}"
+                    f"Worker {worker_id} finished crawling all pages "
+                    f"for {city} - {category}. Total iterations: {iteration_count}"
                 )
                 break
 
             # Scrape URLs of page
+            logger.info(
+                f"Worker {worker_id} starting URL scraping "
+                f"for {city} - {category}"
+            )
             await scrape_urls_of_page(client, base_url, dir_name, worker_id)
+            logger.info(
+                f"Worker {worker_id} completed URL scraping "
+                f"for {city} - {category}"
+            )
 
             # Sleep before next iteration
             delay = random.uniform(*CONF.crawling_delay)
-            logger.info(f"Worker {worker_id} sleeping for {delay:.2f} seconds")
+            logger.info(
+                f"Worker {worker_id} sleeping for {delay:.2f} seconds "
+                f"before next iteration for {city} - {category}"
+            )
             await asyncio.sleep(delay)
 
-    # logger.info(f"Worker {worker_id} completed all tasks for {base_url}")
+    logger.info(
+        f"Worker {worker_id} completed all tasks for {city} - {category}. "
+        f"Total iterations: {iteration_count}"
+    )
 
 
 async def aquire_data():
-    
-    
+
     semaphore = asyncio.Semaphore(CONF.max_concurrent_requests)
     connector = aiohttp.TCPConnector(limit_per_host=CONF.max_concurrent_requests)
     async with aiohttp.ClientSession(connector=connector) as client:
         tasks = []
-        for worker_id, (dir_name, url) in enumerate(CONF.base_url_info.items(), start=0):
+        for worker_id, (dir_name, url) in enumerate(
+            CONF.base_url_info.items(), start=0
+        ):
             valid_dir_name = os.path.dirname(os.path.abspath(__file__)) + "/" + dir_name
-            os.makedirs( valid_dir_name , exist_ok=True)
+            os.makedirs(valid_dir_name, exist_ok=True)
             await initialize_base_url_if_new(client, valid_dir_name, url)
             task = asyncio.create_task(
                 crawl_and_process(semaphore, client, url, valid_dir_name, worker_id),
-                name=f"Worker-{worker_id}"
+                name=f"Worker-{worker_id}",
             )
             tasks.append(task)
 
@@ -433,4 +496,3 @@ async def aquire_data():
                 logger.error(f"Task failed with exception: {result}")
 
         logger.info("FINISHED SUCCESS----")
-
