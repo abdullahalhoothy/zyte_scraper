@@ -79,7 +79,7 @@ def create_links_to_scrap() -> dict:
         # "buildings_for_sale": "%D8%B9%D9%85%D8%A7%D8%A6%D8%B1-%D9%84%D9%84%D8%A8%D9%8A%D8%B9",
         # "chalet_for_sale": "%D8%A7%D8%B3%D8%AA%D8%B1%D8%A7%D8%AD%D8%A9-%D9%84%D9%84%D8%A8%D9%8A%D8%B9",
         # "farm_for_sale": "%D9%85%D8%B2%D8%B1%D8%B9%D8%A9-%D9%84%D9%84%D8%A8%D9%8A%D8%B9",
-        # "shops_for_sale": "%D9%85%D8%AD%D9%84%D8%A7%D8%AA-%D9%84%D9%84%D8%A8%D9%8A%D8%B9",
+        "shops_for_sale": "%D9%85%D8%AD%D9%84%D8%A7%D8%AA-%D9%84%D9%84%D8%A8%D9%8A%D8%B9",
         # "floor_for_sale": "%D8%AF%D9%88%D8%B1-%D9%84%D9%84%D8%A8%D9%8A%D8%B9",
         "lands_for_rent": "%D8%A3%D8%B1%D8%A7%D8%B6%D9%8A-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
         "villas_for_rent": "%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A5%D9%8A%D8%AC%D8%A7%D8%B1",
@@ -88,13 +88,13 @@ def create_links_to_scrap() -> dict:
         # "furnished_apartment_rent": "%D8%B4%D9%82%D8%A9-%D9%85%D9%81%D8%B1%D9%88%D8%B4%D8%A9",
         # "istiraha_for_rent": "%D8%B4%D8%A7%D9%84%D9%8A%D9%87-%D9%84%D9%84%D8%A5%D9%8A%D8%AC%D8%A7%D8%B1",
         # "chalet_for_rent": "%D8%A7%D8%B3%D8%AA%D8%B1%D8%A7%D8%AD%D8%A9-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
-        # "commercial_office_for_rent": "%D9%85%D9%83%D8%AA%D8%A8-%D8%AA%D8%AC%D8%A7%D8%B1%D9%8A-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
-        # "buildings_for_rent": "%D8%B9%D9%85%D8%A7%D8%A6%D8%B1-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
-        # "warehouse_for_rent": "%D9%85%D8%B3%D8%AA%D9%88%D8%AF%D8%B9-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
+        "commercial_office_for_rent": "%D9%85%D9%83%D8%AA%D8%A8-%D8%AA%D8%AC%D8%A7%D8%B1%D9%8A-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
+        "buildings_for_rent": "%D8%B9%D9%85%D8%A7%D8%A6%D8%B1-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
+        "warehouse_for_rent": "%D9%85%D8%B3%D8%AA%D9%88%D8%AF%D8%B9-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
         # "camp_for_rent": "%D9%85%D8%AE%D9%8A%D9%85-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
         # "rooms_for_rent": "%D8%BA%D8%B1%D9%81-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
         # "floor_for_rent": "%D8%AF%D9%88%D8%B1-%D9%84%D9%84%D8%A5%D9%8A%D8%AC%D8%A7%D8%B1",
-        # "shops_for_rent": "%D9%85%D8%AD%D9%84%D8%A7%D8%AA-%D9%84%D9%84%D8%A5%D9%8A%D8%AC%D8%A7%D8%B1",
+        "shops_for_rent": "%D9%85%D8%AD%D9%84%D8%A7%D8%AA-%D9%84%D9%84%D8%A5%D9%8A%D8%AC%D8%A7%D8%B1",
     }
 
     output = {}
@@ -141,6 +141,6 @@ CONF = ScraperConfig(
     crawling_progress_file_name="progress.json",
     response_data_file_name="response_data.json",
     irregular_pages_file="irregular_pages.json",
-    crawling_delay=(1, 5),
-    scraping_delay=(1, 5),
+    crawling_delay=(0.1, 2),
+    scraping_delay=(0.1, 2),
 )
