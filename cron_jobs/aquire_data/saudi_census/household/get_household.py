@@ -17,6 +17,9 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 
 from bs4 import BeautifulSoup
+
+logging.basicConfig(level=logging.INFO, filename="get_household.log", encoding="utf-8", filemode="a", format="%(asctime)s [%(levelname)s] %(message)s")
+
 def get_intel_mac_driver():
     """
     Create an Intel Mac-compatible ChromeDriver instance
@@ -75,24 +78,24 @@ class Map:
                     self._systematic_map_navigation(location)
                     if zoom_level < 6:
                         self._zoom_in_on_map()
+                        logging.info(f"Zoomed {zoom_level} times.")
                         time.sleep(15)
         except Exception as e:
-                print(f"Error processing : {e}")
+                logging.error(f"Error processing : {e}")
     def _switch_to_iframe(self,driver):
         try:
             self.wait.until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-            print("Switched to iframe successfully.")
+            logging.info("Switched to iframe successfully.")
         except TimeoutException:
-            print("No iframe found or timeout while switching to iframe.")
+            logging.error("No iframe found or timeout while switching to iframe.")
             raise
     
     def _search_by_location(self, location):
         try:
-            print("Searching for location...")
+            logging.info("Searching for location...")
             search_input = self.wait.until(
                 EC.presence_of_element_located((By.ID, "esri_dijit_Search_0_input"))
             )
-            print(f"Search input found: {search_input}")
             self.driver.execute_script("arguments[0].scrollIntoView(true);", search_input)
             self.driver.execute_script("arguments[0].click();", search_input)
             search_input.clear()
@@ -100,12 +103,12 @@ class Map:
             search_input.submit()
             search_input.clear()
             time.sleep(13)
-            print(f"Successfully searched for location: {location}")
+            logging.info(f"Successfully searched for location: {location}")
         except (NoSuchElementException, TimeoutException) as e:
-            print(f"Error navigating to URL: {e}")
+            logging.error(f"Error navigating to URL: {e}")
             raise
         except Exception as e:
-            print(f"Error searching for location: {str(e)}")
+            logging.error(f"Error searching for location: {str(e)}")
             raise
     def _hover_top_left(self, element):
         try:
@@ -127,10 +130,10 @@ class Map:
             simulateClickAndHover(arguments[0]);
             """, element)
             time.sleep(0.01)  # Short wait for the popup
-            # print("Hovered at top-left.")
+            # logging.info("Hovered at top-left.")
             return True
         except Exception as e:
-            print(f"Error hovering at top-left: {str(e)}")
+            logging.error(f"Error hovering at top-left: {str(e)}")
             return False
     def _hover_bottom_right(self, element):
         try:
@@ -152,10 +155,10 @@ class Map:
             simulateClickAndHover(arguments[0]);
             """, element)
             time.sleep(0.01)  # Short wait for the popup
-            # print("Hovered at bottom-right.")
+            # logging.info("Hovered at bottom-right.")
             return True
         except Exception as e:
-            print(f"Error hovering at bottom-right: {str(e)}")
+            logging.error(f"Error hovering at bottom-right: {str(e)}")
             return False
     def _click_and_hover(self, element):
         try:
@@ -179,30 +182,30 @@ class Map:
             time.sleep(0.001)  # Short wait for the popup
             return self._verify_popup_appears()
         except Exception as e:
-            print(f"Error clicking SVG point using JavaScript: {str(e)}")
+            logging.error(f"Error clicking SVG point using JavaScript: {str(e)}")
             return False
     
     def _verify_popup_appears(self):
         try:
-            print("Waiting for popup to appear...")
+            logging.info("Waiting for popup to appear...")
             self.wait.until(
                 EC.visibility_of_element_located((By.CSS_SELECTOR, 'div[dojoattachpoint="_description"]'))
             )
-            print("Popup appeared.")
+            logging.info("Popup appeared.")
             return True
         except TimeoutException:
-            print("Popup did not appear in time.")
+            logging.error("Popup did not appear in time.")
             return False
     def _get_all_map_selectors(self):
         try:
             elements = self.driver.find_elements(By.CSS_SELECTOR, "g[id*='layer'] path")
-            print(f"Found {len(elements)}  elements in the current view.")
+            logging.info(f"Found {len(elements)}  elements in the current view.")
             # filter out elements that are not visible
             elements = [element for element in elements if element.is_displayed() and element.get_attribute("fill") != "none" ]
-            print(f"Found {len(elements)} visible elements in the current view.")
+            logging.info(f"Found {len(elements)} visible elements in the current view.")
             return elements
         except NoSuchElementException:
-            print("No elements found.")
+            logging.error("No elements found.")
         return []
 
     def _get_selector_path(self,element):
@@ -226,12 +229,12 @@ class Map:
             )
             degree = degree_element.text.strip()
             if "Move mouse to get coordinates" in degree or degree == "":
-                print("Degree data not loaded correctly.")
+                logging.info("Degree data not loaded correctly.")
                 return "N/A"
-            # print(f"Degree retrieved: {degree}")
+            # logging.info(f"Degree retrieved: {degree}")
             return degree
         except TimeoutException:
-            print("Degree element not found in time.")
+            logging.error("Degree element not found in time.")
             return "N/A"
 
     def _scrape_popup_data(self,location, selector):
@@ -256,7 +259,7 @@ class Map:
             zoom_element = self.driver.find_element(By.CSS_SELECTOR, '#map')
             zoom_level = zoom_element.get_attribute('data-zoom')
             data['Zoom Level'] = zoom_level
-            print(f"Zoom Level: {zoom_level}")
+            logging.info(f"Zoom Level: {zoom_level}")
 
             # Household Average/Median Size
             household_sizes = soup.find_all('span', class_='esriNumericValue')
@@ -268,9 +271,9 @@ class Map:
             data['Household Median Size'] =  household_median_s if household_median_s else "N/A"
             return data
         except Exception as e:
-            print(f"Error scraping data from the popup: {str(e)}")
+            logging.error(f"Error scraping data from the popup: {str(e)}")
             return {}
-    def _write_to_csv(self,data, filename="Final_household.csv"):
+    def _write_to_csv(self,data, filename="household_v1.csv"):
         try:
             with open(filename, mode="a", newline="", encoding="utf-8") as file:
                 writer = csv.DictWriter(file, fieldnames=data.keys())
@@ -278,7 +281,7 @@ class Map:
                     writer.writeheader()
                 writer.writerow(data)
         except Exception as e:
-            print(f"Error writing to CSV: {str(e)}")
+            logging.error(f"Error writing to CSV: {str(e)}")
     def _hide_unwanted_divs(self):
         """Hide any unwanted UI elements that might block interaction."""
         script = """
@@ -300,18 +303,18 @@ class Map:
             });
         """
         self.driver.execute_script(script)
-        print("Hide unwanted divs.")
+        logging.info("Hide unwanted divs.")
         time.sleep(5)
         
     def _zoom_in_on_map(self):
         try:
             zoom_in_button = self.driver.find_element(By.CSS_SELECTOR, '.zoom.zoom-in')
-            print(zoom_in_button)
+            logging.info(zoom_in_button)
             self.driver.execute_script("arguments[0].click();", zoom_in_button)
             time.sleep(0.5)
-            print(f"Zoomed in.")
+            logging.info(f"Zoomed in.")
         except (NoSuchElementException, TimeoutException, Exception) as e:
-            print(f"Error zooming in on map: {str(e)}")   
+            logging.error(f"Error zooming in on map: {str(e)}")   
     def _click_and_wait_for_popup(self,element):
         retries = 1
         for _ in range(retries):
@@ -319,7 +322,7 @@ class Map:
                 if self._verify_popup_appears():
                     return True
             time.sleep(0.001)
-        print("Popup did not appear after attempts.")
+        logging.info("Popup did not appear after attempts.")
         return False 
     def _pan_map(self, x_offset, y_offset):
         """Pan the map by x and y offset pixels."""
@@ -351,7 +354,7 @@ class Map:
             # Correctly call pan_map with two arguments: x and y offsets
             self._pan_map(-x_offset, -y_offset)
         except Exception as e:
-            print(f"Error centering map on element: {str(e)}")
+            logging.error(f"Error centering map on element: {str(e)}")
     def _systematic_map_navigation(self, location):
         processed_selectors = set()
         total_boxes_found = 1
@@ -375,13 +378,13 @@ class Map:
                         data['Top Left Degree'] = top_left_degree
                         data['Bottom Right Degree'] = bottom_right_degree
                         data['id'] = total_boxes_found
-                        # print(f"Data scraped: {data}")
+                        # logging.info(f"Data scraped: {data}")
                         self._write_to_csv(data)
                         processed_selectors.add(selector_path)
                         total_boxes_found += 1
-                        print(f"Total Points Processed: {total_boxes_found}")
+                        logging.info(f"Total Points Processed: {total_boxes_found}")
             except (StaleElementReferenceException, TimeoutException, NoSuchElementException, Exception) as e:
-                print("skipping point.")
+                logging.error("skipping point.")
                 continue
         return total_boxes_found
     
@@ -433,7 +436,7 @@ class ParentFinder:
             self.df['ID'] = self.df['Location'].astype(str) + '-' + self.df['ID'].astype(str) + "-" + self.df['ZoomLevel'].astype(str)
             self.df.drop_duplicates(subset=['ID'], inplace=True)
         except Exception as e:
-            print(f"Error loading data: {e}")
+            logging.error(f"Error loading data: {e}")
             raise
     
     def find_parents(self):
@@ -473,7 +476,7 @@ class ParentFinder:
         self.result_df = df_sorted
         return self.result_df
     
-    def save_results(self, output_file='output_with_parents.csv'):
+    def save_results(self, output_file='household.csv'):
         """
         Save results to a CSV file
         
@@ -484,11 +487,11 @@ class ParentFinder:
         
         try:
             self.result_df.to_csv(output_file, index=False)
-            print(f"Results saved to {output_file}")
+            logging.info(f"Results saved to {output_file}")
         except Exception as e:
-            print(f"Error saving results: {e}")
+            logging.error(f"Error saving results: {e}")
     
-    def run(self, output_file='Final_household_with_parents.csv'):
+    def run(self, output_file='household.csv'):
         self.load_data()
         self.find_parents()
         self.save_results(output_file)
@@ -497,7 +500,8 @@ class ParentFinder:
 def main():
     url = "https://maps.saudicensus.sa/arcportal/apps/experiencebuilder/experience/?id=f80f2d4e40e149718461492befc96bf9&page=Household"
     locations = [
-        "Jeddah","Al-Riyadh", "Makkah", 
+        "Jeddah",
+        "Al-Riyadh", "Makkah",
         # "Al-Madinah", "Al-Qaseem",
         # "Eastern Region", "Aseer", "Tabouk", "Najran",
         # "Al-Baha", "Jazan", "Al-Jouf", "Hail",
@@ -507,17 +511,20 @@ def main():
     try:
         scraper.navigate_and_extract()
     except Exception as e:
-        print(f"Scraping failed: {e}")
+        logging.error(f"Scraping failed: {e}")
     
     finally:
         scraper.close()
     
     try:
         # Find parent rows
-        parent_finder = ParentFinder('Final_household.csv')
+        parent_finder = ParentFinder('household_v1.csv')
         parent_finder.run()
     except Exception as e:
-        print(f"Parent finding failed: {e}")
+        logging.error(f"Parent finding failed: {e}")
+    finally:
+        logging.info("Process completed.")
+        os.remove("household_v1.csv")
 
 if __name__ == "__main__":
     main()

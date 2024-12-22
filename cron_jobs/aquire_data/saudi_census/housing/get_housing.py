@@ -80,7 +80,7 @@ class Map:
                     self._systematic_map_navigation(location)
                     if zoom_level < 6:
                         self._zoom_in_on_map()
-                        logging.info(msg=f"Zoomed  {zoom_level + 1} times.")
+                        logging.info(msg=f"Zoomed  {zoom_level} times.")
                         time.sleep(15)
         except Exception as e:
                 logging.exception(f"Error processing : {e}")
@@ -314,7 +314,7 @@ class Map:
         except Exception as e:
             logging.exception(f"Error scraping data from the popup: {str(e)}")
             return {}
-    def _write_to_csv(self,data, filename="Final_housing.csv"):
+    def _write_to_csv(self,data, filename="housing_v1.csv"):
         try:
             with open(filename, mode="a", newline="", encoding="utf-8") as file:
                 writer = csv.DictWriter(file, fieldnames=data.keys())
@@ -529,7 +529,7 @@ class ParentFinder:
         self.result_df = df_sorted
         return self.result_df
     
-    def save_results(self, output_file='output_with_parents.csv'):
+    def save_results(self, output_file='housing.csv'):
         """
         Save results to a CSV file
         
@@ -544,7 +544,7 @@ class ParentFinder:
         except Exception as e:
             logging.exception(f"Error saving results: {e}")
     
-    def run(self, output_file='Final_housing_with_parents.csv'):
+    def run(self, output_file='housing.csv'):
         self.load_data()
         self.find_parents()
         self.save_results(output_file)
@@ -553,8 +553,8 @@ class ParentFinder:
 def main():
     url = "https://maps.saudicensus.sa/arcportal/apps/experiencebuilder/experience/?id=f80f2d4e40e149718461492befc96bf9&page=Housing"
     locations = [
-        "Jeddah","Al-Riyadh", "Makkah",
-        #   "Al-Madinah", "Al-Qaseem",
+        "Jeddah","Al-Riyadh", "Makkah", 
+        # "Al-Madinah", "Al-Qaseem",
         # "Eastern Region", "Aseer", "Tabouk", "Najran",
         # "Al-Baha", "Jazan", "Al-Jouf", "Hail",
         # "Al-Ahsa", "Al-Qatif", "Al-Jubail"
@@ -570,7 +570,7 @@ def main():
     
     try:
         # Find parent rows
-        parent_finder = ParentFinder('Final_housing.csv')
+        parent_finder = ParentFinder('housing_v1.csv')
         parent_finder.run()
     except Exception as e:
         logging.exception(f"Parent finding failed: {e}")

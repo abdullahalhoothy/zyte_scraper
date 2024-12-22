@@ -4,7 +4,7 @@ import os
 from typing import List, Union, Dict
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from common_methods import GCPBucketManager
-from cron_jobs.aquire_data.aqar_zyte_gbucket_db.load_config import load_config
+from cron_jobs.aquire_data.aqar_zyte.load_config import load_config
 import glob
 
 def upload_csv_to_gcp(directories: List[Union[str, Dict]], gcp_manager: GCPBucketManager) -> bool:

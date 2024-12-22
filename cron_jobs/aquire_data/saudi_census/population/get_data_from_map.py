@@ -521,10 +521,11 @@ class ParentFinder:
 def main():
     url = "https://maps.saudicensus.sa/arcportal/apps/experiencebuilder/experience/?id=f80f2d4e40e149718461492befc96bf9&page=Population"
     locations = [
-        "Jeddah","Al-Riyadh", "Makkah", "Al-Madinah", "Al-Qaseem",
-        "Eastern Region", "Aseer", "Tabouk", "Najran",
-        "Al-Baha", "Jazan", "Al-Jouf", "Hail",
-        "Al-Ahsa", "Al-Qatif", "Al-Jubail"
+        "Jeddah","Al-Riyadh", "Makkah"
+        # , "Al-Madinah", "Al-Qaseem",
+        # "Eastern Region", "Aseer", "Tabouk", "Najran",
+        # "Al-Baha", "Jazan", "Al-Jouf", "Hail",
+        # "Al-Ahsa", "Al-Qatif", "Al-Jubail"
     ]
     scraper = Map(url=url, locations=locations)
     try:

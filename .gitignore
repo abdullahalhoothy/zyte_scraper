@@ -15,6 +15,7 @@ storage/postgres/sql_logs/**
 /riyadh_villa_allrooms/**
 **/ignore*
 **/*response_data*
+**/*_irregular_pages*
 
 .DS_Store
 
