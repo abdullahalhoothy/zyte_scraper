@@ -301,12 +301,12 @@ async def check_page_fully_scraped(selected_page, dir_name, base_url):
         logger.info(f"page={selected_page} fully scrapped")
 
 
-async def process_listings(client, selected_page, dir_name):
+async def scrape_listings(client, selected_page, dir_name):
     start_time = time.time()
     city, category = dir_name.split("/")[-1].split("_", 1)
     MAX_RETRIES = 3
 
-    logger.info(f"Scraping page={selected_page} for {city} - {category}")
+    logger.info(f"Scraping urls of page={selected_page} for {city} - {category}")
     page_response_file = f"{dir_name}/{selected_page}_response_data.json"
     page_response_data = await use_json(page_response_file)
     all_listing_urls = [url for url, value in page_response_data.items() if value == ""]
@@ -403,7 +403,7 @@ async def scrape_urls_of_page(
         f"(mapped from worker_id {worker_id} to index {page_index} of {len(listing_to_scrape)} available pages)"
     )
 
-    await process_listings(client, listing_url, dir_name)
+    await scrape_listings(client, listing_url, dir_name)
     await check_page_fully_scraped(listing_url, dir_name, base_url)
     scrape_elapsed = get_elapsed_time(scrape_start)
     logger.info(
