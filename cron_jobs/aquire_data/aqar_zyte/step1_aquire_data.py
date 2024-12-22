@@ -28,21 +28,27 @@ class RequestError(Exception):
 
 
 def setup_logger():
+    # Get the directory of the current module
+    module_dir = os.path.dirname(os.path.abspath(__file__))
+    
     logger_cls = logging.getLogger(__name__)
     logger_cls.setLevel(logging.INFO)
-
+    
     formatter = logging.Formatter(
         "%(asctime)s - %(levelname)s - %(funcName)s - %(message)s"
     )
-
+    
+    # Console handler setup
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger_cls.addHandler(console_handler)
-
-    file_handler = logging.FileHandler("crawler.log")
+    
+    # File handler setup with full path
+    log_file_path = os.path.join(module_dir, "crawler.log")
+    file_handler = logging.FileHandler(log_file_path)
     file_handler.setFormatter(formatter)
     logger_cls.addHandler(file_handler)
-
+    
     return logger_cls
 
 
@@ -367,32 +373,53 @@ async def process_listings(client, selected_page, dir_name):
     )
 
 
-async def scrape_urls_of_page(client, base_url, dir_name, worker_id):
-    _, _, pages_to_process, _ = await fetch_crawling_prog(dir_name, base_url)
+async def scrape_urls_of_page(
+    client,
+    base_url,
+    dir_name,
+    worker_id,
+    city,
+    category,
+):
+    scrape_start = time.time()
+    logger.info(f"Worker {worker_id} starting URL scraping " f"for {city} - {category}")
+    _, _, listing_to_scrape, _ = await fetch_crawling_prog(dir_name, base_url)
     city, category = dir_name.split("/")[-1].split("_", 1)
 
     logger.info(f"Worker {worker_id} ({city} - {category}) started scrape_urls_of_page")
 
-    if not pages_to_process:
+    if not listing_to_scrape:
         logger.warning(
-            f"No pages to process for worker {worker_id} ({city} - {category})"
+            f"No listings to scrap for worker {worker_id} ({city} - {category})"
         )
-        return
+        return "finished"
 
     # Use modulo to wrap around the worker_id to available pages
-    page_index = worker_id % len(pages_to_process)
-    selected_page = pages_to_process[page_index]
+    page_index = worker_id % len(listing_to_scrape)
+    listing_url = listing_to_scrape[page_index]
 
     logger.info(
-        f"Worker {worker_id} ({city} - {category}) processing page {selected_page} "
-        f"(mapped from worker_id {worker_id} to index {page_index} of {len(pages_to_process)} available pages)"
+        f"Worker {worker_id} ({city} - {category}) scraping listing {listing_url} "
+        f"(mapped from worker_id {worker_id} to index {page_index} of {len(listing_to_scrape)} available pages)"
     )
 
-    await process_listings(client, selected_page, dir_name)
-    await check_page_fully_scraped(selected_page, dir_name, base_url)
+    await process_listings(client, listing_url, dir_name)
+    await check_page_fully_scraped(listing_url, dir_name, base_url)
+    scrape_elapsed = get_elapsed_time(scrape_start)
+    logger.info(
+        f"Worker {worker_id} completed URL scraping "
+        f"for {city} - {category} (took {scrape_elapsed})"
+    )
 
 
-async def crawl_page_batch(client, base_url, dir_name):
+async def crawl_page_batch(
+    client, base_url, dir_name, worker_id, iteration_count, city, category, start_time
+):
+    status = "Not Finished"
+    batch_start = time.time()
+    logger.info(
+        f"Worker {worker_id} beginning page batch crawl " f"for {city} - {category}"
+    )
     _, crawled_pages, _, last_page = await fetch_crawling_prog(dir_name, base_url)
     logger.info(
         f"Fetched crawling progress: {len(crawled_pages)} pages crawled, last page is {last_page}"
@@ -400,7 +427,14 @@ async def crawl_page_batch(client, base_url, dir_name):
 
     if len(crawled_pages) >= last_page:
         logger.info("All pages have been crawled. Finishing.")
-        return "finished"
+        status = "finished"
+        total_elapsed = get_elapsed_time(start_time)
+        logger.info(
+            f"Worker {worker_id} finished crawling all pages "
+            f"for {city} - {category}. Total iterations: {iteration_count}. "
+            f"Total time: {total_elapsed}"
+        )
+        return status
 
     pages_to_crawl = set(range(1, last_page + 1)) - set(crawled_pages)
     crawling_batch_size = min(
@@ -459,6 +493,11 @@ async def crawl_page_batch(client, base_url, dir_name):
         extend_list_value=True,
     )
     logger.info("Updated crawling progress")
+    batch_elapsed = get_elapsed_time(batch_start)
+    logger.info(
+        f"Worker {worker_id} completed page batch crawl with status: {status} "
+        f"for {city} - {category} (took {batch_elapsed})"
+    )
 
 
 async def crawl_and_process(semaphore, client, base_url, dir_name, worker_id):
@@ -478,7 +517,7 @@ async def crawl_and_process(semaphore, client, base_url, dir_name, worker_id):
     async with semaphore:
         iteration_count = 0
         while True:
-            iteration_start = time.time()
+            iteration_start_time = time.time()
             iteration_count += 1
             logger.info(
                 f"Worker {worker_id} starting iteration {iteration_count} "
@@ -486,45 +525,36 @@ async def crawl_and_process(semaphore, client, base_url, dir_name, worker_id):
             )
 
             # Crawl page batch
-            batch_start = time.time()
-            logger.info(
-                f"Worker {worker_id} beginning page batch crawl "
-                f"for {city} - {category}"
-            )
-            status = await crawl_page_batch(client, base_url, dir_name)
-            batch_elapsed = get_elapsed_time(batch_start)
-            logger.info(
-                f"Worker {worker_id} completed page batch crawl with status: {status} "
-                f"for {city} - {category} (took {batch_elapsed})"
-            )
 
-            if status == "finished":
-                total_elapsed = get_elapsed_time(start_time)
-                logger.info(
-                    f"Worker {worker_id} finished crawling all pages "
-                    f"for {city} - {category}. Total iterations: {iteration_count}. "
-                    f"Total time: {total_elapsed}"
-                )
-                break
+            crawling_status = await crawl_page_batch(
+                client,
+                base_url,
+                dir_name,
+                worker_id,
+                iteration_count,
+                city,
+                category,
+                start_time,
+            )
 
             # Scrape URLs of page
-            scrape_start = time.time()
-            logger.info(
-                f"Worker {worker_id} starting URL scraping " f"for {city} - {category}"
-            )
-            await scrape_urls_of_page(client, base_url, dir_name, worker_id)
-            scrape_elapsed = get_elapsed_time(scrape_start)
-            logger.info(
-                f"Worker {worker_id} completed URL scraping "
-                f"for {city} - {category} (took {scrape_elapsed})"
+            scraping_status = await scrape_urls_of_page(
+                client,
+                base_url,
+                dir_name,
+                worker_id,
+                city,
+                category,
             )
 
-            iteration_elapsed = get_elapsed_time(iteration_start)
+            iteration_elapsed = get_elapsed_time(iteration_start_time)
             logger.info(
                 f"Worker {worker_id} completed iteration {iteration_count} "
                 f"for {city} - {category} (took {iteration_elapsed})"
             )
 
+            if crawling_status == "finished" and scraping_status == "finished":
+                break
             # Sleep before next iteration
             delay = random.uniform(*CONF.crawling_delay)
             logger.info(
