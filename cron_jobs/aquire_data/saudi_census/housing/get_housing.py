@@ -65,9 +65,9 @@ class Map:
         self.chrome_options.add_argument("--lang=en-US")
         self.chrome_options.add_argument("--start-maximized")
 
-        # self.chrome_options.add_argument("--headless")
-        # self.chrome_options.add_argument("--disable-gpu")
-        # self.chrome_options.add_argument("--no-sandbox")
+        self.chrome_options.add_argument("--headless")
+        self.chrome_options.add_argument("--disable-gpu")
+        self.chrome_options.add_argument("--no-sandbox")
 
         # Setup webdriver
         self.driver = webdriver.Chrome(options=self.chrome_options)
@@ -91,10 +91,9 @@ class Map:
                 self._search_by_location(location)
                 for zoom_level in range(1, 7):
                     self._systematic_map_navigation(location)
-                    if zoom_level < 6:
-                        self._zoom_in_on_map()
-                        logging.info(msg=f"Zoomed  {zoom_level} times.")
-                        time.sleep(15)
+                    self._zoom_in_on_map()
+                    logging.info(msg=f"Zoomed  {zoom_level} times.")
+                    time.sleep(15)
         except Exception as e:
             logging.exception(f"Error processing : {e}")
 
@@ -697,7 +696,7 @@ def main():
         scraper.close()
 
     try:
-        # Find parent rows
+        logging.info("post scraping prcess started...")
         parent_finder = ParentFinder("housing_v1.csv")
         parent_finder.run()
     except Exception as e:
