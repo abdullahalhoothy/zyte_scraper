@@ -66,9 +66,9 @@ class Map:
         self.chrome_options.add_argument("--lang=en-US")
         self.chrome_options.add_argument("--start-maximized")
 
-        # self.chrome_options.add_argument("--headless")
-        # self.chrome_options.add_argument("--disable-gpu")
-        # self.chrome_options.add_argument("--no-sandbox")
+        self.chrome_options.add_argument("--headless")
+        self.chrome_options.add_argument("--disable-gpu")
+        self.chrome_options.add_argument("--no-sandbox")
 
         # Setup webdriver
         self.driver = webdriver.Chrome(options=self.chrome_options)
@@ -92,10 +92,9 @@ class Map:
                 self._search_by_location(location)
                 for zoom_level in range(1, 7):
                     self._systematic_map_navigation(location)
-                    if zoom_level < 6:
-                        self._zoom_in_on_map()
-                        logging.info(f"Zoomed {zoom_level} times.")
-                        time.sleep(15)
+                    self._zoom_in_on_map()
+                    logging.info(f"Zoomed {zoom_level} times.")
+                    time.sleep(15)
         except Exception as e:
             logging.error(f"Error processing : {e}")
 
@@ -279,7 +278,6 @@ class Map:
             if "Move mouse to get coordinates" in degree or degree == "":
                 logging.info("Degree data not loaded correctly.")
                 return "N/A"
-            # logging.info(f"Degree retrieved: {degree}")
             return degree
         except TimeoutException:
             logging.error("Degree element not found in time.")
@@ -420,7 +418,6 @@ class Map:
     def _zoom_in_on_map(self):
         try:
             zoom_in_button = self.driver.find_element(By.CSS_SELECTOR, ".zoom.zoom-in")
-            logging.info(zoom_in_button)
             self.driver.execute_script("arguments[0].click();", zoom_in_button)
             time.sleep(0.5)
             logging.info(f"Zoomed in.")
@@ -666,6 +663,7 @@ def main():
 
     try:
         # Find parent rows
+        logging.info("post scraping process started.")
         parent_finder = ParentFinder("population_v1.csv")
         parent_finder.run()
     except Exception as e:
