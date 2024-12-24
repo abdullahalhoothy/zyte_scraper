@@ -26,6 +26,9 @@ from bs4 import BeautifulSoup
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Change the logging.basicConfig line to:
 log_file_path = os.path.join(MODULE_DIR, "get_housing.log")
+if os.path.exists(log_file_path):
+    os.remove(log_file_path)
+    print("Log file removed.")
 logging.basicConfig(
     level=logging.INFO,
     filename=log_file_path,
@@ -674,6 +677,12 @@ class ParentFinder:
         except Exception as e:
             logging.exception(f"Error saving results: {e}")
 
+    def run(self, output_file='housing.csv'):
+        self.load_data()
+        self.find_parents()
+        self.save_results(output_file)
+        return self.result_df
+
 
 def main():
     url = "https://maps.saudicensus.sa/arcportal/apps/experiencebuilder/experience/?id=f80f2d4e40e149718461492befc96bf9&page=Housing"
@@ -686,6 +695,15 @@ def main():
         # "Al-Baha", "Jazan", "Al-Jouf", "Hail",
         # "Al-Ahsa", "Al-Qatif", "Al-Jubail"
     ]
+    try:
+        # remove file before starting
+        temp_file_path = os.path.join(MODULE_DIR, 'housing_v1.csv')
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+    except Exception as e:
+        logging.error(f"Error removing file: {e}")
+        logging.warning("Please remove housing_v1.csv manually before running the script.")
+        exit(1)
     scraper = Map(url=url, locations=locations)
     try:
         scraper.navigate_and_extract()
