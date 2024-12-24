@@ -113,7 +113,7 @@ class Map:
 
     def _search_by_location(self, location):
         try:
-            logging.info("Searching for location...")
+            logging.info(msg=f"Searching for location : {location}")
             search_input = self.wait.until(
                 EC.presence_of_element_located((By.ID, "esri_dijit_Search_0_input"))
             )
@@ -126,7 +126,6 @@ class Map:
             search_input.submit()
             search_input.clear()
             time.sleep(13)
-            logging.info(f"Successfully searched for location: {location}")
         except (NoSuchElementException, TimeoutException) as e:
             logging.error(f"Error navigating to URL: {e}")
             raise
@@ -685,6 +684,8 @@ def main():
         temp_file_path = os.path.join(MODULE_DIR, 'population_v1.csv')
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
+        logging.shutdown()
+        
 
 if __name__ == "__main__":
     main()
