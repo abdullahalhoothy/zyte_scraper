@@ -51,6 +51,7 @@ gcp_manager = GCPBucketManager(
 directories = ["generate_economic_slocator_data",
                "generate_housing_slocator_data",
                "generate_household_slocator_data",
+               "canada_commercial_properties",
                {"saudi_census": ["population",
                                "housing",
                                "household"]}]
