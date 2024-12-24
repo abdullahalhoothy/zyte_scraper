@@ -12,7 +12,7 @@ def load_config(
 def create_links_to_scrap() -> dict:
 
     cities = {
-        # "riyadh": "%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6",
+        "riyadh": "%D8%A7%D9%84%D8%B1%D9%8A%D8%A7%D8%B6",
         "jeddah": "%D8%AC%D8%AF%D8%A9",
         "mecca": "%D9%85%D9%83%D8%A9-%D8%A7%D9%84%D9%85%D9%83%D8%B1%D9%85%D8%A9",
         # "dammam": "%D8%A7%D9%84%D8%AF%D9%85%D8%A7%D9%85",
