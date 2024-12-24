@@ -27,6 +27,9 @@ MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Change the logging.basicConfig line to:
 log_file_path = os.path.join(MODULE_DIR, "get_population.log")
+if os.path.exists(log_file_path):
+    os.remove(log_file_path)
+    print("Log file removed.")
 logging.basicConfig(
     level=logging.INFO,
     filename=log_file_path,
@@ -652,6 +655,15 @@ def main():
         # "Al-Baha", "Jazan", "Al-Jouf", "Hail",
         # "Al-Ahsa", "Al-Qatif", "Al-Jubail"
     ]
+    try:
+        # remove file before starting
+        temp_file_path = os.path.join(MODULE_DIR, 'population_v1.csv')
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+    except Exception as e:
+        logging.error(f"Error removing file: {e}")
+        logging.warning("Please remove population_v1.csv manually before running the script.")
+        exit(1)
     scraper = Map(url=url, locations=locations)
     try:
         scraper.navigate_and_extract()
