@@ -11,3 +11,5 @@ geopandas
 zipfile36
 selenium
 webdriver-manager
+tenacity
+httpx
