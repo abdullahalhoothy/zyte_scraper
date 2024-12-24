@@ -1,3 +1,4 @@
+import os
 import httpx
 import asyncio
 import pandas as pd
@@ -74,6 +75,10 @@ async def process_batch(semaphore, client, demographic_endpoint_client, property
 
 async def main():
     batch_size = 10
+    temp_dir = os.path.join(os.path.dirname(__file__), "ignore")
+    os.makedirs(temp_dir, exist_ok=True)
+
+    output_file = os.path.join(temp_dir, 'raw_commercial_properties.csv')
 
     async with httpx.AsyncClient() as client:
         await establish_session(client)
@@ -86,6 +91,7 @@ async def main():
             return
 
         semaphore = asyncio.Semaphore(batch_size)
+
         properties_list = []
         for i in range(0, total_count, batch_size):
             batch_indices = range(i, min(i + batch_size, total_count))
@@ -107,8 +113,8 @@ async def main():
                                                         .strip())
 
         print("Total Properties: ", len(df))
-        df.to_csv('raw_commercial_properties.csv', sep=',', index=False, encoding='utf-8-sig')
-        print(f"Data saved to raw_commercial_properties.csv ({len(df)} unique properties)")
+        df.to_csv(output_file, sep=',', index=False, encoding='utf-8-sig')
+        print(f"Data saved to {output_file} ({len(df)} unique properties)")
 
 
 if __name__ == "__main__":
