@@ -26,6 +26,9 @@ from bs4 import BeautifulSoup
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Change the logging.basicConfig line to:
 log_file_path = os.path.join(MODULE_DIR, "get_housing.log")
+if os.path.exists(log_file_path):
+    os.remove(log_file_path)
+    print("Log file removed.")
 logging.basicConfig(
     level=logging.INFO,
     filename=log_file_path,
@@ -584,59 +587,60 @@ class ParentFinder:
         """
         if self.df is None:
             self.load_data()
+        try:
+            # self.df.replace("N/A", np.nan, inplace=True)
+            # Sort dataframe by zoom level in descending order
+            df_sorted = self.df.sort_values("ZoomLevel", ascending=False).copy()
 
-        # Sort dataframe by zoom level in descending order
-        df_sorted = self.df.sort_values("ZoomLevel", ascending=False).copy()
-
-        # Initialize parent column
-        df_sorted["Parent"] = np.nan
-
-        df_sorted["TotalDwellings"] = (
-            df_sorted["TotalDwellings"].astype(str).str.replace(",", "").astype(int)
-        )
-        df_sorted["ResidentialDwellings"] = (
-            df_sorted["ResidentialDwellings"]
-            .astype(str)
-            .str.replace(",", "")
-            .astype(int)
-        )
-        df_sorted["OwnedDwellings"] = (
-            df_sorted["OwnedDwellings"].astype(str).str.replace(",", "").astype(int)
-        )
-        df_sorted["RentedDwellings"] = (
-            df_sorted["RentedDwellings"].astype(str).str.replace(",", "").astype(int)
-        )
-        df_sorted["ProvidedDwellings"] = (
-            df_sorted["ProvidedDwellings"].astype(str).str.replace(",", "").astype(int)
-        )
-        df_sorted["OtherResidentialDwellings"] = (
-            df_sorted["OtherResidentialDwellings"]
-            .astype(str)
-            .str.replace(",", "")
-            .astype(int)
-        )
-        df_sorted["Non-ResidentialDwellings"] = (
-            df_sorted["Non-ResidentialDwellings"]
-            .astype(str)
-            .str.replace(",", "")
-            .astype(int)
-        )
-        df_sorted["PublicHousing"] = (
-            df_sorted["PublicHousing"].astype(str).str.replace(",", "").astype(int)
-        )
-        df_sorted["WorkCamps"] = (
-            df_sorted["WorkCamps"].astype(str).str.replace(",", "").astype(int)
-        )
-        df_sorted["CommercialDwellings"] = (
-            df_sorted["CommercialDwellings"]
-            .astype(str)
-            .str.replace(",", "")
-            .astype(int)
-        )
-        df_sorted["OtherDwellings"] = (
-            df_sorted["OtherDwellings"].astype(str).str.replace(",", "").astype(int)
-        )
-
+            # Initialize parent column
+            df_sorted["Parent"] = np.nan
+            df_sorted["TotalDwellings"] = (df_sorted["TotalDwellings"].astype(str).str.replace(",", "")
+            .pipe(pd.to_numeric, errors='coerce')
+            ) 
+            df_sorted["ResidentialDwellings"] = (
+                df_sorted["ResidentialDwellings"]
+                .astype(str)
+                .str.replace(",", "")
+                .pipe(pd.to_numeric, errors='coerce')
+            )
+            df_sorted["OwnedDwellings"] = (
+                df_sorted["OwnedDwellings"].astype(str).str.replace(",", "")
+            )
+            df_sorted["RentedDwellings"] = (
+                df_sorted["RentedDwellings"].astype(str).str.replace(",", "")
+            )
+            df_sorted["ProvidedDwellings"] = (
+                df_sorted["ProvidedDwellings"].astype(str).str.replace(",", "")
+            )
+            df_sorted["OtherResidentialDwellings"] = (
+                df_sorted["OtherResidentialDwellings"]
+                .astype(str)
+                .str.replace(",", "")
+                .pipe(pd.to_numeric, errors='coerce')
+            )
+            df_sorted["Non-ResidentialDwellings"] = (
+                df_sorted["Non-ResidentialDwellings"]
+                .astype(str)
+                .str.replace(",", "")
+                .pipe(pd.to_numeric, errors='coerce')
+            )
+            df_sorted["PublicHousing"] = (
+                df_sorted["PublicHousing"].astype(str).str.replace(",", "")
+            )
+            df_sorted["WorkCamps"] = (
+                df_sorted["WorkCamps"].astype(str).str.replace(",", "")
+            )
+            df_sorted["CommercialDwellings"] = (
+                df_sorted["CommercialDwellings"]
+                .astype(str)
+                .str.replace(",", "")
+                .pipe(pd.to_numeric, errors='coerce')
+            )
+            df_sorted["OtherDwellings"] = (
+                df_sorted["OtherDwellings"].astype(str).str.replace(",", "")
+            )
+        except Exception as e:
+            logging.exception(f"Error processing data: {e}")
         for i, row in df_sorted.iterrows():
             current_point = self.parse_degrees(row["Degree"])
             current_zoom = row["ZoomLevel"]
@@ -674,6 +678,12 @@ class ParentFinder:
         except Exception as e:
             logging.exception(f"Error saving results: {e}")
 
+    def run(self, output_file='housing.csv'):
+        self.load_data()
+        self.find_parents()
+        self.save_results(output_file)
+        return self.result_df
+
 
 def main():
     url = "https://maps.saudicensus.sa/arcportal/apps/experiencebuilder/experience/?id=f80f2d4e40e149718461492befc96bf9&page=Housing"
@@ -686,6 +696,15 @@ def main():
         # "Al-Baha", "Jazan", "Al-Jouf", "Hail",
         # "Al-Ahsa", "Al-Qatif", "Al-Jubail"
     ]
+    try:
+        # remove file before starting
+        temp_file_path = os.path.join(MODULE_DIR, 'housing_v1.csv')
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+    except Exception as e:
+        logging.error(f"Error removing file: {e}")
+        logging.warning("Please remove housing_v1.csv manually before running the script.")
+        exit(1)
     scraper = Map(url=url, locations=locations)
     try:
         scraper.navigate_and_extract()
@@ -701,6 +720,12 @@ def main():
         parent_finder.run()
     except Exception as e:
         logging.exception(f"Parent finding failed: {e}")
+    finally:
+        logging.info("Process completed.")
+        temp_file_path = os.path.join(MODULE_DIR, 'housing_v1.csv')
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        logging.shutdown()
 
 
 if __name__ == "__main__":
