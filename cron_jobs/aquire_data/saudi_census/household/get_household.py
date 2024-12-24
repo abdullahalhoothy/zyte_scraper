@@ -25,6 +25,9 @@ from bs4 import BeautifulSoup
 # Add this near the top of the file, after imports
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 log_file_path = os.path.join(MODULE_DIR, "get_household.log")
+if os.path.exists(log_file_path):
+    os.remove(log_file_path)
+    print("Log file removed.")
 logging.basicConfig(
     level=logging.INFO,
     filename=log_file_path,
@@ -558,25 +561,40 @@ class ParentFinder:
             logging.info(f"Results saved to {output_path}")
         except Exception as e:
             logging.error(f"Error saving results: {e}")
+            
+    def run(self, output_file='household.csv'):
+        self.load_data()
+        self.find_parents()
+        self.save_results(output_file)
+        return self.result_df
 
 
 def main():
     url = "https://maps.saudicensus.sa/arcportal/apps/experiencebuilder/experience/?id=f80f2d4e40e149718461492befc96bf9&page=Household"
     locations = [
         "Jeddah",
-        "Al-Riyadh",
-        "Makkah",
+        # "Al-Riyadh",
+        # "Makkah",
         # "Al-Madinah", "Al-Qaseem",
         # "Eastern Region", "Aseer", "Tabouk", "Najran",
         # "Al-Baha", "Jazan", "Al-Jouf", "Hail",
         # "Al-Ahsa", "Al-Qatif", "Al-Jubail"
     ]
+    
+    try:
+        # remove file before starting
+        temp_file_path = os.path.join(MODULE_DIR, 'household_v1.csv')
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+    except Exception as e:
+        logging.error(f"Error removing file: {e}")
+        logging.warning("Please remove household_v1.csv manually before running the script.")
+        exit(1)
     scraper = Map(url=url, locations=locations)
     try:
         scraper.navigate_and_extract()
     except Exception as e:
         logging.error(f"Scraping failed: {e}")
-
     finally:
         scraper.close()
 
