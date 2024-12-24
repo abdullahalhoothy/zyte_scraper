@@ -197,6 +197,10 @@ def parse_property_data(html_content):
     city_id_element = soup.find("input", id="cityId")
     city_id = city_id_element.get("value") if city_id_element else None
 
+    # 12. City Name
+    city_name_element = soup.find("input", id="cityName")
+    city_name = city_name_element.get("value") if city_name_element else None
+
     return {
         "url": url,
         "address": address,
@@ -211,6 +215,7 @@ def parse_property_data(html_content):
         "longitude": longitude,
         "region_stats_summary": region_stats_summary,
         "city_id": city_id,
+        "city_name": city_name,
     }
 
 def demographic_endpoint_closure_client():

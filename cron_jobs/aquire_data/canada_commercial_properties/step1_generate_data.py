@@ -33,6 +33,7 @@ async def process_property(semaphore, client, demographic_endpoint_client, i, to
             'longitude': property_data.get('longitude'),
             'region_stats_summary': property_data.get('region_stats_summary'),
             'city_id': property_data.get('city_id'),
+            'city_name': property_data.get('city_name'),
             'walking_transport_score': transport_scores.get('walking_transport_score'),
             'transit_transport_score': transport_scores.get('transit_transport_score'),
             'cycling_transport_score': transport_scores.get('cycling_transport_score'),
@@ -93,6 +94,7 @@ async def main():
         semaphore = asyncio.Semaphore(batch_size)
 
         properties_list = []
+
         for i in range(0, total_count, batch_size):
             batch_indices = range(i, min(i + batch_size, total_count))
             print(f"Processing batch of properties: {batch_indices}")

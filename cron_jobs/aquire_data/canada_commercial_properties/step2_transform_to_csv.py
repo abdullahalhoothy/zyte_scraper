@@ -18,6 +18,9 @@ def process_commercial_data(csv_file):
     # Split address into address and property_type
     df[['property_type', 'address']] = df['address'].str.split(':', n=1, expand=True)
 
+    # Extract city from city_name
+    df['city'] = df['city_name'].str.split().str[0]
+
     # strip whitespace from all columns
     df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
     
