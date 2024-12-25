@@ -7,9 +7,11 @@ services:
       - ./:/app
     environment:
       - PYTHONPATH=/app
+    env_file:
+      - .env
     networks:
       - scraper-network
-
+      
 networks:
   scraper-network:
     driver: bridge
