@@ -3,7 +3,7 @@ import httpx
 import asyncio
 import pandas as pd
 
-from helpers import establish_session, get_inscriptions, get_total_property_count, get_property_data, demographic_endpoint_closure_client
+from .helpers import establish_session, get_inscriptions, get_total_property_count, get_property_data, demographic_endpoint_closure_client
 
 
 async def process_property(semaphore, client, demographic_endpoint_client, i, total_count):
@@ -94,6 +94,7 @@ async def main():
         semaphore = asyncio.Semaphore(batch_size)
 
         properties_list = []
+        total_count = 100
 
         for i in range(0, total_count, batch_size):
             batch_indices = range(i, min(i + batch_size, total_count))
@@ -115,9 +116,15 @@ async def main():
                                                         .strip())
 
         print("Total Properties: ", len(df))
-        df.to_csv(output_file, sep=',', index=False, encoding='utf-8-sig')
-        print(f"Data saved to {output_file} ({len(df)} unique properties)")
+        try:
+            df.to_csv(output_file, sep=',', index=False, encoding='utf-8-sig')
+            print(f"Data saved to {output_file} ({len(df)} unique properties)")
+        except Exception as e:
+            print(f"Failed to write to CSV: {e}")
 
 
 if __name__ == "__main__":
+    if os.name == 'nt':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(main())
+

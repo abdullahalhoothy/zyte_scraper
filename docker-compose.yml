@@ -9,7 +9,7 @@ services:
       - PYTHONPATH=/app
     networks:
       - scraper-network
-
+      
 networks:
   scraper-network:
     driver: bridge
