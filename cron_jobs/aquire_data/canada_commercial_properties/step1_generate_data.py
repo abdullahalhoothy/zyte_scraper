@@ -94,7 +94,6 @@ async def main():
         semaphore = asyncio.Semaphore(batch_size)
 
         properties_list = []
-        total_count = 100
 
         for i in range(0, total_count, batch_size):
             batch_indices = range(i, min(i + batch_size, total_count))
