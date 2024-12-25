@@ -1,11 +1,15 @@
 services:
-  gbucket_to_db:
-    build: cron_jobs/gbucket_to_db/
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/app
     environment:
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - BUCKET_NAME=${BUCKET_NAME}
-      - CRED_PATH=${CRED_PATH}
+      - PYTHONPATH=/app
+    networks:
+      - scraper-network
 
+networks:
+  scraper-network:
+    driver: bridge
