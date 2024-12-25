@@ -48,9 +48,9 @@ def get_intel_mac_driver():
     # Chrome options for headless browsing
     chrome_options = Options()
     chrome_options.add_argument("--lang=en-US")
-    # chrome_options.add_argument("--headless")
-    # chrome_options.add_argument("--disable-gpu")
-    # chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
     driver_path = "/usr/local/bin/chromedriver"
     service = Service(driver_path)
     # Create and return the driver
@@ -156,6 +156,9 @@ class Map:
             )
             time.sleep(0.01)  # Short wait for the popup
             return True
+        except (TimeoutError, TimeoutException) as e:
+            logging.exception(f"Error Timeout hovering at top-left: {str(e)}")
+            return False
         except Exception as e:
             logging.exception(f"Error hovering at top-left: {str(e)}")
             return False
@@ -212,6 +215,9 @@ class Map:
             )
             time.sleep(0.001)  # Short wait for the popup
             return self._verify_popup_appears()
+        except TimeoutError as e:
+            logging.exception(f"Error clicking and hovering: {str(e)}")
+            return False
         except Exception as e:
             logging.exception(f"Error clicking SVG point using JavaScript: {str(e)}")
             return False
