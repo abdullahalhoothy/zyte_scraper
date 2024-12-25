@@ -116,8 +116,6 @@ async def main():
                                                         .strip())
 
         print("Total Properties: ", len(df))
-        df.to_csv(output_file, sep=',', index=False, encoding='utf-8-sig')
-        print(f"Data saved to {output_file} ({len(df)} unique properties)")
         try:
             df.to_csv(output_file, sep=',', index=False, encoding='utf-8-sig')
             print(f"Data saved to {output_file} ({len(df)} unique properties)")
