@@ -5,7 +5,7 @@ from db_connection import DatabaseConnection
 import importlib.util
 import inspect
 
-def get_module_functions(module_name: str, base_path: str = "cron_jobs/raw_to_ops/transforms"):
+def get_module_functions(module_name: str, base_path: str = "cron_jobs/step5_raw_to_ops/transforms"):
     full_path = os.path.join(base_path, f"{module_name}.py")
     spec = importlib.util.spec_from_file_location(module_name, full_path)
     module = importlib.util.module_from_spec(spec)

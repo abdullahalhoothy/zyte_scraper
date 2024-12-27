@@ -386,7 +386,7 @@ def read_and_merge_csv_files(slocator_gcp, file_paths):
         blob = slocator_gcp.bucket.blob(file_path)
         data = blob.download_as_bytes()
         try:
-            df = pd.read_csv(BytesIO(data), encoding="utf-8")
+            df = pd.read_csv(BytesIO(data), encoding="utf-8-sig") # handles both utf-8 and utf-8-sig
         except UnicodeDecodeError:
             df = pd.read_csv(BytesIO(data), encoding="ISO-8859-1")
         dataframes.append(df)
