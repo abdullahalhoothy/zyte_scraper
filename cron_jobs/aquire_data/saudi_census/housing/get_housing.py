@@ -1,3 +1,4 @@
+import gc
 import os
 import csv
 import logging
@@ -71,6 +72,8 @@ class Map:
         self.chrome_options.add_argument("--headless")
         self.chrome_options.add_argument("--disable-gpu")
         self.chrome_options.add_argument("--no-sandbox")
+        self.chrome_options.add_argument('--memory-pressure-off')
+        self.chrome_options.add_argument('--js-flags="--max-old-space-size=2048"')  
 
         # Setup webdriver
         self.driver = webdriver.Chrome(options=self.chrome_options)
@@ -156,6 +159,9 @@ class Map:
             )
             time.sleep(0.01)  # Short wait for the popup
             return True
+        except (TimeoutError, TimeoutException) as e:
+            logging.exception(f"Error Timeout hovering at top-left: {str(e)}")
+            return False
         except Exception as e:
             logging.exception(f"Error hovering at top-left: {str(e)}")
             return False
@@ -212,6 +218,9 @@ class Map:
             )
             time.sleep(0.001)  # Short wait for the popup
             return self._verify_popup_appears()
+        except TimeoutError as e:
+            logging.exception(f"Error clicking and hovering: {str(e)}")
+            return False
         except Exception as e:
             logging.exception(f"Error clicking SVG point using JavaScript: {str(e)}")
             return False
@@ -246,6 +255,8 @@ class Map:
             return elements
         except NoSuchElementException:
             logging.exception("No elements found.")
+        except Exception as e:
+            logging.exception(f"Error getting all map selectors: {str(e)}")
         return []
 
     def _get_selector_path(self, element):
@@ -467,37 +478,47 @@ class Map:
         total_boxes_found = 1
         top_left_degree = "N/A"
         bottom_right_degree = "N/A"
-        elements = self._get_all_map_selectors()
-
-        for element in elements:
-            try:
-                selector_path = self._get_selector_path(element)
-                if selector_path and selector_path not in processed_selectors:
-                    # self._pan_and_center_map(element)
-                    if self._hover_top_left(element):
-                        top_left_degree = self._get_degree_data()
-                    if self._hover_bottom_right(element):
-                        bottom_right_degree = self._get_degree_data()
-                    if self._click_and_wait_for_popup(element):
-                        degree = self._get_degree_data()
-                        data = self._scrape_popup_data(location, selector_path)
-                        data["Degree"] = degree
-                        data["Top Left Degree"] = top_left_degree
-                        data["Bottom Right Degree"] = bottom_right_degree
-                        data["id"] = total_boxes_found
-                        self._write_to_csv(data)
-                        processed_selectors.add(selector_path)
-                        total_boxes_found += 1
-                        logging.info(msg=f"Total Points Processed: {total_boxes_found}")
-            except (
-                StaleElementReferenceException,
-                TimeoutException,
-                NoSuchElementException,
-                Exception,
-            ) as e:
-                logging.exception("skipping point.")
-                continue
-        return total_boxes_found
+        try:
+            elements = self._get_all_map_selectors()
+            for element in elements:
+                try:
+                    selector_path = self._get_selector_path(element)
+                    if selector_path and selector_path not in processed_selectors:
+                        # self._pan_and_center_map(element)
+                        if self._hover_top_left(element):
+                            top_left_degree = self._get_degree_data()
+                        if self._hover_bottom_right(element):
+                            bottom_right_degree = self._get_degree_data()
+                        if self._click_and_wait_for_popup(element):
+                            degree = self._get_degree_data()
+                            data = self._scrape_popup_data(location, selector_path)
+                            data["Degree"] = degree
+                            data["Top Left Degree"] = top_left_degree
+                            data["Bottom Right Degree"] = bottom_right_degree
+                            data["id"] = total_boxes_found
+                            self._write_to_csv(data)
+                            # free up memory
+                            data.clear()
+                            data = None
+                            del data
+                            processed_selectors.add(selector_path)
+                            total_boxes_found += 1
+                            logging.info(msg=f"Total Points Processed: {total_boxes_found}")
+                except (
+                    StaleElementReferenceException,
+                    TimeoutException,
+                    NoSuchElementException,
+                    Exception,
+                ) as e:
+                    logging.exception("skipping point due to: %s", str(e))
+                    continue
+            elements.clear()
+            elements = None
+            del elements
+            gc.collect()
+            return total_boxes_found
+        except Exception as e:
+            logging.exception(f"Error processing map navigation: {str(e)}")
 
     def close(self):
         """
