@@ -1,7 +1,7 @@
 import os
 import csv
 import logging
-import json
+import gc
 import time
 from typing import List, Dict, Any
 import pandas as pd
@@ -70,6 +70,8 @@ class Map:
         self.chrome_options.add_argument("--headless")
         self.chrome_options.add_argument("--disable-gpu")
         self.chrome_options.add_argument("--no-sandbox")
+        self.chrome_options.add_argument('--memory-pressure-off')
+        self.chrome_options.add_argument('--js-flags="--max-old-space-size=2048"')  
 
         # Setup webdriver
         self.driver = webdriver.Chrome(options=self.chrome_options)
@@ -245,6 +247,8 @@ class Map:
             return elements
         except NoSuchElementException:
             logging.error("No elements found.")
+        except Exception as e:
+            logging.error(f"Error fetching map elements: {str(e)}")
         return []
 
     def _get_selector_path(self, element):
@@ -442,6 +446,9 @@ class Map:
                         data["id"] = total_boxes_found
                         # logging.info(f"Data scraped: {data}")
                         self._write_to_csv(data)
+                        data.clear()
+                        data = None
+                        del data
                         processed_selectors.add(selector_path)
                         total_boxes_found += 1
                         logging.info(f"Total Points Processed: {total_boxes_found}")
@@ -451,8 +458,12 @@ class Map:
                 NoSuchElementException,
                 Exception,
             ) as e:
-                logging.error("skipping point.")
+                logging.error(f"skipping point due to error: {e}")
                 continue
+        elements.clear()
+        elements = None
+        del elements
+        gc.collect()
         return total_boxes_found
 
     def close(self):
