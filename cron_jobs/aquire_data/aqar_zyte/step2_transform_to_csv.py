@@ -179,7 +179,10 @@ def process_and_filter_data(directory, all_keys, num_files=350):
 
     spec_cols = [col for col in all_keys if "specifications" in col]
     non_spec_cols = [col for col in all_keys if col not in spec_cols]
-    df = df.drop(columns=[col for col in columns_to_drop if col in non_spec_cols])
+    try:
+        df = df.drop(columns=[col for col in columns_to_drop if col in non_spec_cols])
+    except:
+        pass
 
     print("Selecting columns to keep...")
     value_counts = df.nunique() / len(df)
@@ -268,13 +271,18 @@ def process_and_filter_data(directory, all_keys, num_files=350):
 
 
 def get_all_keys(directory, num_files=50):
+    
     all_col_names_path = (
-        os.path.dirname(os.path.abspath(__file__)) + "/" + "all_col_names.json"
+        os.path.dirname(os.path.abspath(__file__)) + "\\all_col_names.json"
     )
+    print(f"Reading to get cols {all_col_names_path}...")
     if os.path.exists(all_col_names_path):
+        print("Loading existing all_col_names.json...")
         with open(all_col_names_path, "r", encoding="utf-8") as file:
             all_keys = json.load(file)
             return all_keys["all_col_names"]
+    
+    print("Processing data to get all keys...")
     all_keys = set()
     json_files = glob.glob(os.path.join(directory, "*_response_data.json"))
 
@@ -293,6 +301,7 @@ def get_all_keys(directory, num_files=50):
     except:
         pass
 
+    print(f"Saving all keys to {all_col_names_path}...")
     output_data = {"all_col_names": list(all_keys)}
     with open(all_col_names_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=4, ensure_ascii=False)
@@ -301,10 +310,13 @@ def get_all_keys(directory, num_files=50):
 
 
 def save_to_csv(directories):
+    print("Reading JSON files and saving to CSV...")
     for directory in directories:
         # Get all keys from the first 50 files
         dir_path = os.path.dirname(os.path.abspath(__file__)) + "/" + directory
+        print(f"Processing {dir_path}...")
         all_keys = get_all_keys(directory)
+        print(f"Total keys: {len(all_keys)}")
 
         # Process and filter data to get the columns
         columns = process_and_filter_data(directory, all_keys)
@@ -322,7 +334,8 @@ def save_to_csv(directories):
 
                 for url, listing_data in data.items():
                     # Skip empty listings
-                    if not listing_data or all(v == "" for v in listing_data.values()):
+                    if not listing_data:
+                        print(f"Empty listing found at {url}")
                         continue
 
                     flattened = flatten_json(listing_data)
@@ -362,6 +375,7 @@ def save_to_csv(directories):
 
 
 def transform_to_csv():
+    print("Starting transformation to CSV...")
     save_to_csv(CONF.base_url_info)
 
 def merge_csv_files():
@@ -370,7 +384,7 @@ def merge_csv_files():
     # Read all CSV files into a list of DataFrames, filtering out empty ones
     dataframes = []
     for file in all_csv_files:
-        df = pd.read_csv(file)
+        df = pd.read_csv(file, low_memory=False)
         if not df.empty:
             dataframes.append(df)
     
