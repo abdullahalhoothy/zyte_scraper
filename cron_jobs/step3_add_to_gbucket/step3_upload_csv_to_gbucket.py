@@ -5,7 +5,7 @@ from typing import List, Union, Dict
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from common_methods import GCPBucketManager
-from cron_jobs.aquire_data.aqar_zyte.load_config import load_config
+from cron_jobs.aquire_data.saudi_real_estate.load_config import load_config
 import glob
 
 
@@ -56,16 +56,16 @@ config = load_config()
 # Initialize GCP manager once
 gcp_manager = GCPBucketManager(
     bucket_name="s-locator",
-    credentials_path="cron_jobs/secret_weighty-gasket-437422-h6-c961161f5668.json",
+    credentials_path="cron_jobs/weighty-gasket-437422-h6-e1255469595a.json",
 )
 
 directories = [
     # "generate_economic_slocator_data",
     # "generate_housing_slocator_data",
     # "generate_household_slocator_data",
-    "aqar_zyte",
-    "canada_census",
-    "canada_commercial_properties",
+    # "saudi_real_estate",
+    # "canada_census",
+    # "canada_commercial_properties",
     {"saudi_census": ["population", "housing", "household"]},
 ]
 

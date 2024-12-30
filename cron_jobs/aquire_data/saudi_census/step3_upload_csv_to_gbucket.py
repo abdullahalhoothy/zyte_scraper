@@ -4,7 +4,7 @@ import os
 from typing import List
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 from common_methods import GCPBucketManager
-from cron_jobs.aquire_data.aqar_zyte.load_config import load_config
+from cron_jobs.aquire_data.saudi_real_estate.load_config import load_config
 import glob
 
 

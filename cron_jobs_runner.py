@@ -2,7 +2,7 @@ import schedule
 import time
 import asyncio
 
-from cron_jobs.aquire_data.aqar_zyte.step1_zyte_aqar import main as zyte_aqar_runner
+from cron_jobs.aquire_data.saudi_real_estate.step1_zyte_aqar import main as zyte_aqar_runner
 from cron_jobs.gbucket_to_db.step4 import main as gbucket_to_db_runner
 
 

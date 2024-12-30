@@ -17,10 +17,13 @@ storage/postgres/sql_logs/**
 **/*response_data*
 **/*_irregular_pages*
 /cron_jobs/*.json
-/cron_jobs/aquire_data/aqar_zyte/aqar_data.csv
-/cron_jobs/aquire_data/aqar_zyte/*/*
-!/cron_jobs/aquire_data/aqar_zyte/*/progress.json
+/cron_jobs/aquire_data/saudi_real_estate/aqar_data.csv
+/cron_jobs/aquire_data/saudi_real_estate/aqar_data - Copy.csv
+/cron_jobs/aquire_data/saudi_real_estate/*/*
+!/cron_jobs/aquire_data/saudi_real_estate/*/progress.json
+!/cron_jobs/aquire_data/saudi_real_estate/*/process_and_filter_data.json
 /cron_jobs/aquire_data/canada_census/canada_census.csv
+/cron_jobs/aquire_data/canada_census/canada_census - Copy.csv
 
 .DS_Store
 
