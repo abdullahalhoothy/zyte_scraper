@@ -13,6 +13,25 @@ import glob
 import json
 
 
+REAL_ESTATE_CATEGORIES = [
+    'villas_for_sale',
+    'apartments_for_rent',
+    'lands_for_rent',
+    'lands_for_sale',
+    'house_for_sale',
+    'villas_for_rent',
+    'house_for_rent',
+    'apartments_for_sale'
+]
+
+COMMERCIAL_CATEGORIES = [
+    'commercial_office_for_rent',
+    'shops_for_sale',
+    'buildings_for_rent',
+    'shops_for_rent',
+    'warehouse_for_rent'
+]
+
 def contains_arabic(text):
     arabic_pattern = re.compile("[\u0600-\u06FF]")
     return bool(arabic_pattern.search(str(text)))
@@ -299,11 +318,49 @@ def save_to_csv(directories):
         df = df[columns]
 
         # Save to CSV
-        df['city'] = dir_path.split("/")[-1].split("_")[0]
+
+        folder_name = dir_path.split("/")[-1]
+        folder_name_parts = folder_name.split("_", 1)
+        df['city'] = folder_name_parts[0].title()
+        df['category'] = folder_name_parts[1]
+        df['type'] = 'unknown'
+        
+        # Update types based on category
+        mask_real_estate = df['category'].isin(REAL_ESTATE_CATEGORIES)
+        mask_commercial = df['category'].isin(COMMERCIAL_CATEGORIES)
+        
+        df.loc[mask_real_estate, 'type'] = 'real_estate'
+        df.loc[mask_commercial, 'type'] = 'commercial'
+
         csv_filename = dir_path + "/" + "data.csv"
         df.to_csv(csv_filename, index=False)
         print(f"Data saved to {csv_filename}")
 
 
+
 def transform_to_csv():
     save_to_csv(CONF.base_url_info)
+
+def merge_csv_files():
+    all_csv_files = glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "*", "data.csv"))
+    
+    # Read all CSV files into a list of DataFrames, filtering out empty ones
+    dataframes = []
+    for file in all_csv_files:
+        df = pd.read_csv(file)
+        if not df.empty:
+            dataframes.append(df)
+    
+    # Only concatenate if we have non-empty DataFrames
+    if dataframes:
+        df = pd.concat(dataframes, ignore_index=True)
+        df.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "aqar_data.csv"), index=False)
+    else:
+        # Create an empty DataFrame with the expected columns if all inputs were empty
+        pd.DataFrame().to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "aqar_data.csv"), index=False)
+
+
+if __name__ == "__main__":
+    transform_to_csv()
+    merge_csv_files()
+    

@@ -257,6 +257,10 @@ def insert_data_into_table(conn, df, table_name, schema):
             if max_val > 2147483647 or min_val < -2147483648:
                 columns_to_alter.append(col)
                 
+                # Convert float values to integers for BIGINT columns
+                if df[col].dtype == 'float64':
+                    df[col] = df[col].fillna(0).astype('int64')
+                
     buffer = StringIO()
     df.to_csv(buffer, index=False, header=False, sep="\t", na_rep="\\N")
     buffer.seek(0)
