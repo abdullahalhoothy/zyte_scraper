@@ -114,6 +114,7 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         with open(all_col_names_path, "r", encoding="utf-8") as file:
             json_obj = json.load(file)
             return json_obj["sorted_new_keep_cols"]
+        
     # Define the path for the saved DataFrame
 
     # Check if the processed DataFrame already exists
@@ -191,6 +192,9 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         [
             "additional__WebListing_uri___location_lat",
             "additional__WebListing_uri___location_lng",
+            "latitude",
+            "longitude",
+            "region_address"
         ]
     )
 
@@ -253,7 +257,7 @@ def process_and_filter_data(directory, all_keys, num_files=350):
     if "url" in re_nonspec_cols:
         re_nonspec_cols.remove("url")
     # re_nonspec_cols.remove("price")
-    sorted_new_keep_cols = ["url", "price"] + re_spec_cols + re_nonspec_cols
+    sorted_new_keep_cols = ["url", "price", "latitude", "longitude", "region_address"] + re_spec_cols + re_nonspec_cols
 
     output_data = {"sorted_new_keep_cols": sorted_new_keep_cols}
     with open(all_col_names_path, "w", encoding="utf-8") as f:
