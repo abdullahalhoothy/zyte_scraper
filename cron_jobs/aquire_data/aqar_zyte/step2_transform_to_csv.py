@@ -146,6 +146,25 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         all_keys.extend(df.columns)
         all_keys = list(set(all_keys))
 
+
+    df['latitude'] = None
+    if 'additional_ended_details_national_address_latitude' in df.columns and not df['additional_ended_details_national_address_latitude'].isna().all():
+        df['latitude'] = df['additional_ended_details_national_address_latitude']
+    elif 'additional_rops_path_listing_location_lat' in df.columns and not df['additional_rops_path_listing_location_lat'].isna().all():
+        df['latitude'] = df['additional_rops_path_listing_location_lat']
+
+    df['longitude'] = None 
+    if 'additional_ended_details_national_address_longitude' in df.columns and not df['additional_ended_details_national_address_longitude'].isna().all():
+        df['longitude'] = df['additional_ended_details_national_address_longitude']
+    elif 'additional_rops_path_listing_location_lng' in df.columns and not df['additional_rops_path_listing_location_lng'].isna().all():
+        df['longitude'] = df['additional_rops_path_listing_location_lng']
+
+    df['region_address'] = None
+    if 'additional_ended_details_national_address_region' in df.columns and not df['additional_ended_details_national_address_region'].isna().all():
+        df['region_address'] = df['additional_ended_details_national_address_region']
+    elif 'additional_ended_details_national_address_longitude' in df.columns and not df['additional_ended_details_national_address_longitude'].isna().all():
+        df['region_address'] = df['additional_ended_details_national_address_longitude']
+
     # Choose specific columns and drop others
     print("Dropping unnecessary columns...")
     columns_to_drop = [
