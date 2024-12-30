@@ -114,6 +114,7 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         with open(all_col_names_path, "r", encoding="utf-8") as file:
             json_obj = json.load(file)
             return json_obj["sorted_new_keep_cols"]
+        
     # Define the path for the saved DataFrame
 
     # Check if the processed DataFrame already exists
@@ -146,6 +147,25 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         all_keys.extend(df.columns)
         all_keys = list(set(all_keys))
 
+
+    df['latitude'] = None
+    if 'additional_ended_details_national_address_latitude' in df.columns and not df['additional_ended_details_national_address_latitude'].isna().all():
+        df['latitude'] = df['additional_ended_details_national_address_latitude']
+    elif 'additional_rops_path_listing_location_lat' in df.columns and not df['additional_rops_path_listing_location_lat'].isna().all():
+        df['latitude'] = df['additional_rops_path_listing_location_lat']
+
+    df['longitude'] = None 
+    if 'additional_ended_details_national_address_longitude' in df.columns and not df['additional_ended_details_national_address_longitude'].isna().all():
+        df['longitude'] = df['additional_ended_details_national_address_longitude']
+    elif 'additional_rops_path_listing_location_lng' in df.columns and not df['additional_rops_path_listing_location_lng'].isna().all():
+        df['longitude'] = df['additional_rops_path_listing_location_lng']
+
+    df['region_address'] = None
+    if 'additional_ended_details_national_address_region' in df.columns and not df['additional_ended_details_national_address_region'].isna().all():
+        df['region_address'] = df['additional_ended_details_national_address_region']
+    elif 'additional_ended_details_national_address_longitude' in df.columns and not df['additional_ended_details_national_address_longitude'].isna().all():
+        df['region_address'] = df['additional_ended_details_national_address_longitude']
+
     # Choose specific columns and drop others
     print("Dropping unnecessary columns...")
     columns_to_drop = [
@@ -172,6 +192,9 @@ def process_and_filter_data(directory, all_keys, num_files=350):
         [
             "additional__WebListing_uri___location_lat",
             "additional__WebListing_uri___location_lng",
+            "latitude",
+            "longitude",
+            "region_address"
         ]
     )
 
@@ -234,7 +257,7 @@ def process_and_filter_data(directory, all_keys, num_files=350):
     if "url" in re_nonspec_cols:
         re_nonspec_cols.remove("url")
     # re_nonspec_cols.remove("price")
-    sorted_new_keep_cols = ["url", "price"] + re_spec_cols + re_nonspec_cols
+    sorted_new_keep_cols = ["url", "price", "latitude", "longitude", "region_address"] + re_spec_cols + re_nonspec_cols
 
     output_data = {"sorted_new_keep_cols": sorted_new_keep_cols}
     with open(all_col_names_path, "w", encoding="utf-8") as f:

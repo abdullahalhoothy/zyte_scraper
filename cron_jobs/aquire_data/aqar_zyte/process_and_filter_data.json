@@ -2,6 +2,9 @@
     "sorted_new_keep_cols": [
         "url",
         "price",
+        "longitude",
+        "latitude",
+        "region_address",
         "specifications_فيلا_في_السطح",
         "specifications_مؤثثة",
         "specifications_مدخل_سيارة",

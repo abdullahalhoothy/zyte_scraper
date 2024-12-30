@@ -215,7 +215,7 @@ async def make_zyte_request(
                 "json": {
                     "url": url,
                     "httpResponseBody": True,
-                    # "ipType":"residential",
+                    # "ipType":"residential", # enabling this will give better results but will be costly
                     "geolocation": "DE",
                     "actions": [],
                     # "echoData": url,
@@ -223,7 +223,7 @@ async def make_zyte_request(
                     # "sessionContextParameters": "", # goes with the above
                 },
                 "headers": headers,
-                "timeout": 30,  # Set a timeout for the request
+                "timeout": 60,  # Set a timeout for the request
             }
             logger.info(
                 f"Worker-{worker_id}-{city}-{category} attempt number ({attempt}) to make request to {url}"
