@@ -20,6 +20,7 @@ storage/postgres/sql_logs/**
 /cron_jobs/aquire_data/aqar_zyte/aqar_data.csv
 /cron_jobs/aquire_data/aqar_zyte/*/*
 !/cron_jobs/aquire_data/aqar_zyte/*/progress.json
+/cron_jobs/aquire_data/canada_census/canada_census.csv
 
 .DS_Store
 
