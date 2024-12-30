@@ -17,6 +17,7 @@ from cron_jobs.aquire_data.aqar_zyte.utils.aqar_html_parsers import (
     get_last_page,
     extract_listing_hrefs,
     extract_all_data,
+    extract_listing_hrefs_2
 )
 
 import aiofiles
@@ -30,9 +31,20 @@ class RequestError(Exception):
 def setup_logger():
     # Get the directory of the current module
     module_dir = os.path.dirname(os.path.abspath(__file__))
+    log_file_path = os.path.join(module_dir, "crawler.log")
+
+    # Delete existing log file if it exists
+    if os.path.exists(log_file_path):
+        try:
+            os.remove(log_file_path)
+        except Exception as e:
+            print(f"Error deleting old log file: {e}")
 
     logger_cls = logging.getLogger(__name__)
     logger_cls.setLevel(logging.INFO)
+
+    # Clear any existing handlers
+    logger_cls.handlers = []
 
     formatter = logging.Formatter(
         "%(asctime)s - %(levelname)s - %(funcName)s - %(message)s"
@@ -44,7 +56,6 @@ def setup_logger():
     logger_cls.addHandler(console_handler)
 
     # File handler setup with full path
-    log_file_path = os.path.join(module_dir, "crawler.log")
     file_handler = logging.FileHandler(log_file_path)
     file_handler.setFormatter(formatter)
     logger_cls.addHandler(file_handler)
@@ -181,12 +192,13 @@ async def make_zyte_request(
     category,
     max_retries=3,
     parsing_func=None,
-):
+):  
+    status_code= "empty"
     for attempt in range(max_retries):
         try:
             # Try to get cached response
             cached_response = await use_json(response_data_file_path, keys=url)
-            if cached_response and cached_response != {} and cached_response != "":
+            if cached_response and cached_response != {} and cached_response != "" and "error" not in cached_response.lower():
                 logger.info(
                     f"Worker-{worker_id}-{city}-{category} Using cached response for {url}"
                 )
@@ -273,7 +285,7 @@ async def make_zyte_request(
     logger.error(
         f"Worker-{worker_id}-{city}-{category} Failed to get valid response for {url} after {max_retries} attempts"
     )
-    save_data = f"Error {status_code}: {response_json}"
+    save_data = f"Error with status code = {status_code}: {response_json}"
     await use_json(response_data_file_path, keys=url, value=save_data)
     return save_data
 
@@ -319,6 +331,25 @@ async def initialize_and_validate_new_run(
         client, url, response_data_file_path, worker_id, city, category
     )
     crawling_prog, _, _, _ = await fetch_crawling_prog(dir_name, base_url)
+
+
+    # Delete empty response data files
+    for filename in os.listdir(dir_name):
+        if filename.endswith('_response_data.json'):
+            file_path = os.path.join(dir_name, filename)
+            try:
+                async with aiofiles.open(file_path, 'r') as f:
+                    content = await f.read()
+                    # Check if file is empty or just contains {}
+                    if not content.strip() or content.strip() == '{}':
+                        os.remove(file_path)
+                        logger.info(
+                            f"Worker-{worker_id}-{city}-{category} Deleted empty response file: {filename}"
+                        )
+            except Exception as e:
+                logger.error(
+                    f"Worker-{worker_id}-{city}-{category} Error processing file {filename}: {str(e)}"
+                )
 
     if base_url not in crawling_prog:
         last_page = get_last_page(response_data)
@@ -377,15 +408,19 @@ async def initialize_and_validate_new_run(
     await update_crawling_prog(dir_name, key=base_url, value=crawling_prog[base_url])
 
 
+async def load_data_json(dir_name, selected_page):
+    page_response_file = f"{dir_name}/{selected_page}_response_data.json"
+    page_response_data = await use_json(page_response_file)
+    all_remaining_urls = [url for url, value in page_response_data.items() if value == ""]
+    return all_remaining_urls, page_response_data, page_response_file
+
 async def check_page_fully_scraped(
     selected_page, dir_name, base_url, worker_id, city, category
 ):
-    page_response_file = f"{dir_name}/{selected_page}_response_data.json"
-    page_response_data = await use_json(page_response_file)
-    remaining_urls = [url for url, value in page_response_data.items() if value == ""]
-    if page_response_data == {}:
-        remaining_urls = [20]  # TODO temp fix
-    if len(remaining_urls) == 0:
+    # page_response_file = f"{dir_name}/{selected_page}_response_data.json"
+    # page_response_data = await use_json(page_response_file)
+    all_listing_urls, _, _ = await load_data_json(dir_name, selected_page)
+    if len(all_listing_urls) == 0:
         await update_crawling_prog(
             dir_name,
             key=[base_url, "scraped_all_listings_from_pages"],
@@ -395,17 +430,23 @@ async def check_page_fully_scraped(
         logger.info(
             f"Worker-{worker_id}-{city}-{category} page={selected_page} fully scrapped"
         )
+    else:
+        logger.info(
+                f"Worker-{worker_id}-{city}-{category} Page {selected_page} still has {len(all_listing_urls)} URLs to scrape"
+            )
 
 
-async def scrape_listings(client, page_number, dir_name, worker_id, city, category):
+async def scrape_listings(client, selected_page, dir_name, worker_id, city, category):
     start_time = time.time()
-    page_response_file = f"{dir_name}/{page_number}_response_data.json"
-    page_response_data = await use_json(page_response_file)
-    all_listing_urls = [url for url, value in page_response_data.items() if value == ""]
+    page_response_file = f"{dir_name}/{selected_page}_response_data.json"
+    all_listing_urls, _, page_response_file = await load_data_json(dir_name, selected_page)
+
 
     logger.info(
-        f"Worker-{worker_id}-{city}-{category} Found {len(all_listing_urls)} available urls to scrape in page={page_number}"
+        f"Worker-{worker_id}-{city}-{category} Found {len(all_listing_urls)} available urls to scrape in page={selected_page}"
     )
+    if len(all_listing_urls) ==0:
+        return ""
     sample_size = min(
         len(all_listing_urls), random.randint(*CONF.pages_to_scrape_per_worker)
     )
@@ -418,7 +459,7 @@ async def scrape_listings(client, page_number, dir_name, worker_id, city, catego
             f"Worker-{worker_id}-{city}-{category} Beginning to scrape {len(random_sample)} urls of {len(all_listing_urls)} available urls"
         )
         logger.info(
-            f"Worker-{worker_id}-{city}-{category} Processing listing {idx}/{len(random_sample)} from page {page_number} "
+            f"Worker-{worker_id}-{city}-{category} Processing listing {idx}/{len(random_sample)} from page {selected_page} "
             f"in {city} for category {category}"
         )
 
@@ -435,7 +476,7 @@ async def scrape_listings(client, page_number, dir_name, worker_id, city, catego
 
         if response_data == "":
             logger.error(
-                f"Worker-{worker_id}-{city}-{category} Failed to process listing {idx}/{len(random_sample)} from page {page_number} "
+                f"Worker-{worker_id}-{city}-{category} Failed to process listing {idx}/{len(random_sample)} from page {selected_page} "
                 f"Moving to next listing. (took {url_elapsed})"
             )
 
@@ -447,7 +488,7 @@ async def scrape_listings(client, page_number, dir_name, worker_id, city, catego
 
     total_elapsed = get_elapsed_time(start_time)
     logger.info(
-        f"Worker-{worker_id}-{city}-{category} Completed processing {len(random_sample)} listings from page {page_number} "
+        f"Worker-{worker_id}-{city}-{category} Completed processing {len(random_sample)} listings from page {selected_page} "
         f"in {city} for category {category} (total time: {total_elapsed})"
     )
 
@@ -461,6 +502,7 @@ async def scrape_urls_of_page(
     category,
 ):
     scrape_start = time.time()
+    scraping_status = "Not Finished"
     logger.info(
         f"Worker-{worker_id}-{city}-{category} fetching crawled pages pending scraping"
     )
@@ -474,7 +516,8 @@ async def scrape_urls_of_page(
     )
     if not crawled_pages_pending_scraping:
         logger.warning(f"Worker-{worker_id}-{city}-{category}  No listings to scrap ")
-        return "finished"
+        scraping_status = "finished"
+        return scraping_status
 
     # Use modulo to wrap around the worker_id to available pages
     page_index = worker_id % len(crawled_pages_pending_scraping)
@@ -499,6 +542,7 @@ async def scrape_urls_of_page(
         city,
         category,
     )
+    return scraping_status
 
 
 async def crawl_page_batch(
@@ -538,17 +582,15 @@ async def crawl_page_batch(
         page_str = f"/{page}" if page != 1 else ""
         url = f"{base_url}{page_str}"
         batch_start = time.time()
-        logger.info(f"Worker-{worker_id}-{city}-{category} beginning page batch crawl")
         logger.info(f"Worker-{worker_id}-{city}-{category} Crawling page {page}: {url}")
 
         html_response = await make_zyte_request(
             client, url, response_data_file_path, worker_id, city, category
         )
-        logger.info(
-            f"Worker-{worker_id}-{city}-{category} Received response for page {page}"
-        )
 
         listing_urls, suspicious_count = extract_listing_hrefs(html_response, base_url)
+        if not listing_urls:
+            listing_urls= extract_listing_hrefs_2(html_response, base_url)
         logger.info(
             f"Worker-{worker_id}-{city}-{category} Extracted {len(listing_urls)} listing URLs from page {page}"
         )
@@ -566,7 +608,7 @@ async def crawl_page_batch(
             logger.info(
                 f"Worker-{worker_id}-{city}-{category} Updated irregular pages file: {filename}"
             )  # TODO add "ignore pages" to prog file
-        else:
+        if listing_urls:
             init_response_data = {url: "" for url in listing_urls}
             await use_json(
                 f"{dir_name}/{page}_{CONF.response_data_file_name}",
@@ -595,6 +637,8 @@ async def crawl_page_batch(
     logger.info(
         f"Worker-{worker_id}-{city}-{category} completed page batch crawl. (took {batch_elapsed})"
     )
+    return status
+
 
 
 async def crawl_and_scrape(semaphore, client, base_url, dir_name, worker_id):
@@ -637,11 +681,10 @@ async def crawl_and_scrape(semaphore, client, base_url, dir_name, worker_id):
                 city,
                 category,
             )
-            logger.info
 
             time_elapsed = get_elapsed_time(iteration_start_time)
             logger.info(
-                f"Worker-{worker_id}-{city}-{category} finished crawl and scrap, took {time_elapsed}"
+                f"Worker-{worker_id}-{city}-{category} finished crawl and scrap, took {time_elapsed} "
                 f"crawl_status={crawling_status}, scraping_status={scraping_status}"
             )
 
