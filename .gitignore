@@ -16,6 +16,10 @@ storage/postgres/sql_logs/**
 **/ignore*
 **/*response_data*
 **/*_irregular_pages*
+/cron_jobs/*.json
+/cron_jobs/aquire_data/aqar_zyte/aqar_data.csv
+/cron_jobs/aquire_data/aqar_zyte/*/*
+!/cron_jobs/aquire_data/aqar_zyte/*/progress.json
 
 .DS_Store
 
