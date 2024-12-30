@@ -216,7 +216,7 @@ async def make_zyte_request(
                     "url": url,
                     "httpResponseBody": True,
                     # "ipType":"residential", # enabling this will give better results but will be costly
-                    "geolocation": "SA",
+                    "geolocation": "DE",
                     "actions": [],
                     # "echoData": url,
                     # "sessionContext": [], # don't know how to use it , but helps avoid bans
