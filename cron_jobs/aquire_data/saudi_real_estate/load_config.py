@@ -85,7 +85,7 @@ def create_links_to_scrap() -> dict:
         "villas_for_rent": "%D9%81%D9%84%D9%84-%D9%84%D9%84%D8%A5%D9%8A%D8%AC%D8%A7%D8%B1",
         "apartments_for_rent": "%D8%B4%D9%82%D9%82-%D9%84%D9%84%D8%A5%D9%8A%D8%AC%D8%A7%D8%B1",
         "house_for_rent": "%D8%A8%D9%8A%D8%AA-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
-        "furnished_apartment_rent": "%D8%B4%D9%82%D8%A9-%D9%85%D9%81%D8%B1%D9%88%D8%B4%D8%A9",
+        "furnished_apartment_for_rent": "%D8%B4%D9%82%D8%A9-%D9%85%D9%81%D8%B1%D9%88%D8%B4%D8%A9",
         "istiraha_for_rent": "%D8%B4%D8%A7%D9%84%D9%8A%D9%87-%D9%84%D9%84%D8%A5%D9%8A%D8%AC%D8%A7%D8%B1",
         "chalet_for_rent": "%D8%A7%D8%B3%D8%AA%D8%B1%D8%A7%D8%AD%D8%A9-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
         "camp_for_rent": "%D9%85%D8%AE%D9%8A%D9%85-%D9%84%D9%84%D8%A5%D8%AC%D8%A7%D8%B1",
