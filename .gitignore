@@ -19,11 +19,7 @@ storage/postgres/sql_logs/**
 /cron_jobs/*.json
 /cron_jobs/aquire_data/saudi_real_estate/aqar_data.csv
 /cron_jobs/aquire_data/saudi_real_estate/aqar_data - Copy.csv
-/cron_jobs/aquire_data/saudi_real_estate/*/*
-!/cron_jobs/aquire_data/saudi_real_estate/*/progress.json
-!/cron_jobs/aquire_data/saudi_real_estate/*/process_and_filter_data.json
-/cron_jobs/aquire_data/canada_census/canada_census.csv
-/cron_jobs/aquire_data/canada_census/canada_census - Copy.csv
+/cron_jobs/aquire_data/saudi_real_estate/**/*.json
 
 .DS_Store
 
