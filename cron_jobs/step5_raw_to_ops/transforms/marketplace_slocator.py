@@ -7,7 +7,10 @@ def create_table_saudi_real_estate():
     CREATE TABLE IF NOT EXISTS schema_marketplace.saudi_real_estate (
         url TEXT NOT NULL,
         city TEXT NULL,
-        price varchar(25) NULL
+        price varchar(25) NULL,
+        latitude REAL,
+        longitude REAL,
+        category TEXT
     );
 
     -- Truncate the table to ensure clean data
@@ -17,8 +20,8 @@ def create_table_saudi_real_estate():
 
 def transformation_saudi_real_estate():
     return """
-    INSERT INTO schema_marketplace.saudi_real_estate (url, city, price)
-    SELECT url, city, price 
+    INSERT INTO schema_marketplace.saudi_real_estate (url, city, price, latitude, longitude, category)
+    SELECT url, city, price, latitude, longitude, category
     FROM raw_schema_marketplace.saudi_real_estate;
     """
 
