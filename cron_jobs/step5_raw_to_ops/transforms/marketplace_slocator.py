@@ -97,8 +97,8 @@ WITH combined_data AS (
         NULLIF(SPLIT_PART(SPLIT_PART("Degree", ' ', 2), ' ', 1), '')::DECIMAL(10,6) as latitude,
         'Saudi Arabia' as country,
         "Location" as city,
-        COALESCE(CAST("Household Average Size" AS TEXT), '') as household_average_size,
-        COALESCE(CAST("Household Median Size" AS TEXT), '') as household_median_size
+        COALESCE(CAST("HouseholdAverageSize" AS TEXT), '') as household_average_size,
+        COALESCE(CAST("HouseholdMedianSize" AS TEXT), '') as household_median_size
     FROM raw_schema_marketplace.household
 
     UNION ALL
@@ -186,17 +186,17 @@ WITH combined_data AS (
         NULLIF(SPLIT_PART(SPLIT_PART("Degree", ' ', 2), ' ', 1), '')::DECIMAL(10,6) as latitude,
         'Saudi Arabia' as country,
         "Location" as city,
-        CAST("Total Dwellings" AS TEXT) as total_dwellings,
-        CAST("Residential Dwellings" AS TEXT) as residential_dwellings,
-        CAST("Owned Dwellings" AS TEXT) as owned_dwellings,
-        CAST("Rented Dwellings" AS TEXT) as rented_dwellings,
-        CAST("Provided Dwellings" AS TEXT) as provided_dwellings,
-        CAST("Other Residential Dwellings" AS TEXT) as other_residential_dwellings,
-        COALESCE(CAST("Non-Residential Dwellings" AS TEXT), '') as non_residential_dwellings,
-        COALESCE(CAST("Public Housing" AS TEXT), '') as public_housing,
-        COALESCE(CAST("Work Camps" AS TEXT), '') as work_camps,
-        COALESCE(CAST("Commercial Dwellings" AS TEXT), '') as commercial_dwellings,
-        COALESCE(CAST("Other Dwellings" AS TEXT), '') as other_dwellings
+        CAST("TotalDwellings" AS TEXT) as total_dwellings,
+        CAST("ResidentialDwellings" AS TEXT) as residential_dwellings,
+        CAST("OwnedDwellings" AS TEXT) as owned_dwellings,
+        CAST("RentedDwellings" AS TEXT) as rented_dwellings,
+        CAST("ProvidedDwellings" AS TEXT) as provided_dwellings,
+        CAST("OtherResidentialDwellings" AS TEXT) as other_residential_dwellings,
+        COALESCE(CAST("Non-ResidentialDwellings" AS TEXT), '') as non_residential_dwellings,
+        COALESCE(CAST("PublicHousing" AS TEXT), '') as public_housing,
+        COALESCE(CAST("WorkCamps" AS TEXT), '') as work_camps,
+        COALESCE(CAST("CommercialDwellings" AS TEXT), '') as commercial_dwellings,
+        COALESCE(CAST("OtherDwellings" AS TEXT), '') as other_dwellings
     FROM raw_schema_marketplace.housing
 
     UNION ALL
@@ -299,14 +299,14 @@ WITH combined_data AS (
         NULLIF(SPLIT_PART(SPLIT_PART("Degree", ' ', 2), ' ', 1), '')::DECIMAL(10,6) as latitude,
         'Saudi Arabia' as country,
         "Location" as city,
-        "Total Population" as population,
-        "Population Density" as population_density,
-        "Male Population" as male_population,
-        "Female Population" as female_population,
-        "Median Age (Male)" as median_age_male,
-        "Median Age (Female)" as median_age_female
+        "TotalPopulation" as population,
+        "PopulationDensity" as population_density,
+        "MalePopulation" as male_population,
+        "FemalePopulation" as female_population,
+        "MedianAgeMale" as median_age_male,
+        "MedianAgeFemale" as median_age_female
     FROM raw_schema_marketplace.population
-    where "Zoom Level" = 6
+    where "ZoomLevel" = 6
 
     UNION ALL
 
