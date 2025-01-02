@@ -1,25 +1,28 @@
-def create_table_real_estate():
+def create_table_saudi_real_estate():
     return """
     -- Create schema if it doesn't exist
     CREATE SCHEMA IF NOT EXISTS schema_marketplace;
     
     -- Create table if it doesn't exist
-    CREATE TABLE IF NOT EXISTS schema_marketplace.real_estate (
+    CREATE TABLE IF NOT EXISTS schema_marketplace.saudi_real_estate (
         url TEXT NOT NULL,
         city TEXT NULL,
-        price varchar(25) NULL
+        price varchar(25) NULL,
+        latitude REAL,
+        longitude REAL,
+        category TEXT
     );
 
     -- Truncate the table to ensure clean data
-    TRUNCATE TABLE schema_marketplace.real_estate;
+    TRUNCATE TABLE schema_marketplace.saudi_real_estate;
     """
 
 
-def transformation_real_estate():
+def transformation_saudi_real_estate():
     return """
-    INSERT INTO schema_marketplace.real_estate (url, city, price)
-    SELECT url, city, price 
-    FROM raw_schema_marketplace.real_estate;
+    INSERT INTO schema_marketplace.saudi_real_estate (url, city, price, latitude, longitude, category)
+    SELECT url, city, price, latitude, longitude, category
+    FROM raw_schema_marketplace.saudi_real_estate;
     """
 
 
@@ -320,7 +323,7 @@ WITH combined_data AS (
             ELSE 'Other'
         END as city,
         CAST(population_2021 AS TEXT) as population,
-        CAST(population_density_per_square_kilometre_2021 AS TEXT) as population_density,
+        CAST(population_density_per_sq_km AS TEXT) as population_density,
         NULL as male_population,
         NULL as female_population,
         NULL as median_age_male,
