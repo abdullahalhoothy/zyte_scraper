@@ -1,4 +1,4 @@
-def create_table_saudi_real_estate():
+def saudi_real_estate():
     return """
     -- Create schema if it doesn't exist
     CREATE SCHEMA IF NOT EXISTS schema_marketplace;
@@ -15,11 +15,8 @@ def create_table_saudi_real_estate():
 
     -- Truncate the table to ensure clean data
     TRUNCATE TABLE schema_marketplace.saudi_real_estate;
-    """
 
-
-def transformation_saudi_real_estate():
-    return """
+    
     INSERT INTO schema_marketplace.saudi_real_estate (url, city, price, latitude, longitude, category)
     SELECT url, city, price, latitude, longitude, category
     FROM raw_schema_marketplace.saudi_real_estate;
@@ -377,7 +374,7 @@ FROM ranked_data
 WHERE rn = 1;
     """
 
-def create_table_commercial_properties():
+def canada_commercial_properties():
     return """
     CREATE SCHEMA IF NOT EXISTS schema_marketplace;
     CREATE TABLE IF NOT EXISTS schema_marketplace.canada_commercial_properties (
@@ -428,11 +425,8 @@ def create_table_commercial_properties():
     );
 
     TRUNCATE TABLE schema_marketplace.canada_commercial_properties;
-    """
 
 
-def transformation_commercial_properties():
-    return """
     INSERT INTO schema_marketplace.canada_commercial_properties (
         url,
         address,
@@ -526,3 +520,8 @@ def transformation_commercial_properties():
         city
     FROM raw_schema_marketplace.canada_commercial_properties;
     """
+
+
+def create_lat_lng_categories_all():
+    # get max and min lat lng of my current 6 tables
+    pass
