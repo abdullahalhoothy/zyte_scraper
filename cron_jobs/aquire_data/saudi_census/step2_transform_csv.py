@@ -87,5 +87,7 @@ if __name__ == "__main__":
     
     logging.info("Starting data processing")
     result_df = process_csv_files(housing, household, population)
-    result_df.to_csv('merged_data.csv', index=False)
+    output_csv_path = os.path.join(MODULE_DIR, "merged_data.csv")
+    df_sorted = result_df.sort_values(by=['longitude', 'latitude'])
+    result_df.to_csv(output_csv_path, index=False)
     logging.info("Data processing complete")
