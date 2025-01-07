@@ -69,8 +69,6 @@ class AqarStandaloneSpider(Spider):
             self.logger.error('Unable to retrieve listings')
             return
         
-        total = 10000
-        
         page_size = int(os.getenv('PAGE_SIZE', 20))
         for i in range(0, total, page_size):
             json_data = self.generate_json_data(from_value=i, size_value=page_size)
