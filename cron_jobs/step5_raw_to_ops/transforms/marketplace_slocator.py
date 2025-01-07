@@ -522,6 +522,6 @@ def canada_commercial_properties():
     """
 
 
-def create_lat_lng_categories_all():
-    # get max and min lat lng of my current 6 tables
-    pass
+# def create_lat_lng_categories_all():
+#     # get max and min lat lng of my current 6 tables
+#     pass

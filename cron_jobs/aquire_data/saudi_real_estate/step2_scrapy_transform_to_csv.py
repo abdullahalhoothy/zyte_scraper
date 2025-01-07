@@ -35,7 +35,7 @@ rent_period_mapping = {
 }
 
 def process_real_estate_data(file_path):
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path, usecols=lambda x: x != 'data')
     
     if 'rent_period' not in df.columns or 'category_id' not in df.columns:
         raise ValueError("CSV must contain 'rent_period' and 'category_id' columns")
