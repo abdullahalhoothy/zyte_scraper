@@ -4,6 +4,27 @@ import os
 import logging
 
 
+def clean_numeric_column(column):
+    """Clean numeric column by removing quotes and commas."""
+    return pd.to_numeric(column.str.replace(',', '').str.replace('"', ''), errors='coerce')
+
+def process_numeric_columns(df):
+    """Process all numeric columns in the dataframe."""
+    numeric_columns = [
+        'MalePopulation', 'FemalePopulation', 'MedianAgeMale', 'MedianAgeFemale',
+        'TotalPopulation', 'PopulationDensity', 'ZoomLevel', 'TotalDwellings',
+        'ResidentialDwellings', 'OwnedDwellings', 'RentedDwellings', 'ProvidedDwellings',
+        'OtherResidentialDwellings', 'Non-ResidentialDwellings', 'PublicHousing',
+        'WorkCamps', 'CommercialDwellings', 'OtherDwellings', 'HouseholdAverageSize',
+        'HouseholdMedianSize'
+    ]
+    
+    for column in numeric_columns:
+        if column in df.columns:
+            df[column] = clean_numeric_column(df[column].astype(str))
+    
+    return df
+
 def split_degree(degree_str):
     """Split degree string into longitude and latitude."""
     logging.info("Splitting Degree column for %s", degree_str)
@@ -21,6 +42,12 @@ def process_csv_files(housing_path, household_path, population_path):
     household_df = pd.read_csv(household_path)
     population_df = pd.read_csv(population_path)
     
+    # Clean numeric columns in all dataframes
+    logging.info("Cleaning numeric columns")
+    housing_df = process_numeric_columns(housing_df)
+    household_df = process_numeric_columns(household_df)
+    population_df = process_numeric_columns(population_df)
+    
     logging.info("Splitting Degree column")
     # Process each dataframe to split Degree column
     for df in [housing_df, household_df, population_df]:
@@ -29,6 +56,7 @@ def process_csv_files(housing_path, household_path, population_path):
         df['longitude'] = degree_split['longitude']
         df['latitude'] = degree_split['latitude']
         logging.info(f"longitude: {df['longitude']} , latitude: {df['latitude']}")
+    
     
     # Merge dataframes based on Degree and ZoomLevel
     # First merge housing and household

@@ -63,10 +63,14 @@ directories = [
     # "generate_economic_slocator_data",
     # "generate_housing_slocator_data",
     # "generate_household_slocator_data",
-    "saudi_real_estate",
+    # "saudi_real_estate",
     # "canada_census",
     # "canada_commercial_properties",
-    # {"saudi_census": ["population", "housing", "household"]},
+    "saudi_census",
+    # {"saudi_census": [
+    #     "population",
+        #   "housing", "household"
+        #   ]},
 ]
 
 upload_success = upload_csv_to_gcp(directories, gcp_manager)

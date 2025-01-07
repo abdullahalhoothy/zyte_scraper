@@ -27,6 +27,7 @@ def apply_transformation(db_conn, transform_name):
         # transform_functions = AVAILABLE_TRANSFORMS[transform_name]
         functions = get_module_functions(transform_name)
         for func in functions:
+            print(f"beginning function: {func.__name__} ")
             query = func()
             db_conn.execute_query(query)
             print(f"Successfully applied function: {func.__name__}")
