@@ -11,15 +11,17 @@ ZYTE_API_KEY = os.getenv("ZYTE_API_KEY")
 if not ZYTE_API_KEY:
     raise ValueError("ZYTE_API_KEY is not set in the environment variables")
 
+os.makedirs(os.path.join(os.path.dirname(__file__), 'ignore'), exist_ok=True)
+
 class AqarStandaloneSpider(Spider):
     name = "saudi_real_estate"
-    allowed_domains = ["aqar.fm"]
-    
+    allowed_domains = ["aqar.fm"]    
     custom_settings = {
         'FEEDS': {
-            'saudi_real_estate.csv': {
+            os.path.join(os.path.dirname(__file__), 'ignore', 'raw_saudi_real_estate.csv'): {
                 'format': 'csv',
                 'encoding': 'utf-8-sig',
+                'overwrite': True,
             }
         },
         'ROBOTSTXT_OBEY': False,
@@ -93,6 +95,7 @@ class AqarStandaloneSpider(Spider):
                 'city_id': listing.get('city_id'),
                 'title': listing.get('title'),
                 'address': listing.get('address'),
+                'rent_period': listing.get('rent_period'),
                 'data': json.dumps(listing),
             }
 
