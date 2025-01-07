@@ -22,7 +22,7 @@ category_mapping_en = {
     18: "camp_for_rent",
     19: "rooms_for_rent",
     20: "shops_for_sale",
-    21: "furnished_apartment",
+    21: "furnished_apartment_for_rent",
     22: "floor_for_sale",
     23: "chalet_for_rent"
 }
@@ -41,15 +41,16 @@ def process_real_estate_data(file_path):
         raise ValueError("CSV must contain 'rent_period' and 'category_id' columns")
     
     df['category_id'] = pd.to_numeric(df['category_id'], errors='coerce')
-    df['category_en'] = df['category_id'].fillna(-1).astype(int).map(category_mapping_en).fillna('others')
+    df = df.rename(columns={'category': 'category_ar'})
+    df['category'] = df['category_id'].fillna(-1).astype(int).map(category_mapping_en).fillna('others')
     df['rent_period'] = pd.to_numeric(df['rent_period'], errors='coerce')
     
     # Set price_description based on category first
-    for_sale_mask = df['category_en'].str.contains('for_sale', case=False, na=False)
+    for_sale_mask = df['category'].str.contains('for_sale', case=False, na=False)
     df.loc[for_sale_mask, 'price_description'] = 'For Sale'
 
-    # if we have for_rent in category_en use rent_period_mapping
-    for_rent_mask = df['category_en'].str.contains('for_rent', case=False, na=False)
+    # if we have for_rent in category use rent_period_mapping
+    for_rent_mask = df['category'].str.contains('for_rent', case=False, na=False)
     df.loc[for_rent_mask, 'price_description'] = df.loc[for_rent_mask, 'rent_period'].fillna(-1).astype(int).map(rent_period_mapping).fillna('For Rent')
     
     # else see if we have rent_period mapping otherwise keep it empty
