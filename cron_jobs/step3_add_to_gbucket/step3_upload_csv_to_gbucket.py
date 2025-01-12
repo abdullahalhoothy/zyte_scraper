@@ -68,8 +68,9 @@ directories = [
     # "canada_commercial_properties",
     "saudi_census",
     # {"saudi_census": [
-    #     "population",
-        #   "housing", "household"
+        # "population",
+        #   "housing", 
+        #   "household"
         #   ]},
 ]
 

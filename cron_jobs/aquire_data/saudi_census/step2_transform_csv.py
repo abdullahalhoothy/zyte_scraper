@@ -35,61 +35,107 @@ def split_degree(degree_str):
     coords = degree_str.replace(' Degrees', '').strip().split()
     return pd.Series({'longitude': float(coords[0]), 'latitude': float(coords[1])})
 
-def process_csv_files(housing_path, household_path, population_path):
-    """Process and merge CSV files."""
-    logging.info("Reading CSV files")
-    housing_df = pd.read_csv(housing_path)
-    household_df = pd.read_csv(household_path)
-    population_df = pd.read_csv(population_path)
+def combine_similar_coordinates(df, tolerance=0.003):
+    """
+    Combine records with similar coordinates by averaging their values.
+    Takes into account ZoomLevel when grouping coordinates.
+    """
+    # Sort by ZoomLevel, latitude, and longitude
+    df_sorted = df.sort_values(['ZoomLevel', 'latitude', 'longitude']).reset_index(drop=True)
     
-    # Clean numeric columns in all dataframes
+    # Calculate differences between consecutive rows
+    lat_diff = df_sorted['latitude'].diff()
+    lon_diff = df_sorted['longitude'].diff()
+    zoom_diff = df_sorted['ZoomLevel'].diff()
+    
+    # Create groups where coordinates are within tolerance and ZoomLevel is same
+    current_group = 0
+    groups = []
+    
+    for i in range(len(df_sorted)):
+        if i == 0:
+            groups.append(current_group)
+            continue
+            
+        # If ZoomLevel changes, start new group
+        if zoom_diff.iloc[i] != 0:
+            current_group += 1
+            groups.append(current_group)
+            continue
+            
+        # Check if coordinates are within tolerance
+        if abs(lat_diff.iloc[i]) <= tolerance and abs(lon_diff.iloc[i]) <= tolerance:
+            groups.append(current_group)
+        else:
+            current_group += 1
+            groups.append(current_group)
+    
+    # Add group column
+    df_sorted['coord_group'] = groups
+    
+    # Create aggregation dictionary for all columns
+    agg_dict = {}
+    for column in df_sorted.columns:
+        if pd.api.types.is_numeric_dtype(df_sorted[column]):
+            agg_dict[column] = 'mean'
+    
+    # For each group, average all numeric values
+    df_grouped = df_sorted.groupby('coord_group').agg(agg_dict)
+    
+    # Round all numeric columns to 3 decimal places
+    numeric_cols = df_grouped.select_dtypes(include=['float64', 'int64']).columns
+    df_grouped[numeric_cols] = df_grouped[numeric_cols].round(3)
+    
+    # Merge back to get averaged and rounded values
+    df_result = df_sorted.merge(
+        df_grouped,
+        left_on='coord_group',
+        right_index=True,
+        suffixes=('_orig', '')
+    )
+    
+    # Drop temporary columns
+    cols_to_drop = ['coord_group'] + [col for col in df_result.columns if col.endswith('_orig')]
+    df_result = df_result.drop(cols_to_drop, axis=1)
+    
+    return df_result
+
+
+def process_csv_files(household_path, population_path):
+    """Process and merge household and population CSV files."""
+    logging.info("Reading CSV files")
+    
+    # Read CSVs and immediately drop unnecessary columns
+    columns_to_drop = ['Location', 'Selector', 'TopLeftDegree', 
+                      'BottomRightDegree', 'ID', 'Parent']
+    
+    household_df = pd.read_csv(household_path).drop(columns=columns_to_drop, errors='ignore')
+    population_df = pd.read_csv(population_path).drop(columns=columns_to_drop, errors='ignore')
+    
+    # Clean numeric columns
     logging.info("Cleaning numeric columns")
-    housing_df = process_numeric_columns(housing_df)
     household_df = process_numeric_columns(household_df)
     population_df = process_numeric_columns(population_df)
     
-    logging.info("Splitting Degree column")
-    # Process each dataframe to split Degree column
-    for df in [housing_df, household_df, population_df]:
-        # Split Degree column into longitude and latitude
+    # Process degree columns
+    logging.info("Processing coordinates")
+    for df in [household_df, population_df]:
         degree_split = df['Degree'].apply(split_degree)
         df['longitude'] = degree_split['longitude']
         df['latitude'] = degree_split['latitude']
-        logging.info(f"longitude: {df['longitude']} , latitude: {df['latitude']}")
     
-    
-    # Merge dataframes based on Degree and ZoomLevel
-    # First merge housing and household
+    # Merge dataframes
     logging.info("Merging dataframes")
     merged_df = pd.merge(
-        housing_df,
         household_df,
-        on=['longitude', 'latitude', 'ZoomLevel'],
-        how='outer',
-        suffixes=('_housing', '_household')
-    )
-    
-    # Then merge with population
-    final_df = pd.merge(
-        merged_df,
         population_df,
         on=['longitude', 'latitude', 'ZoomLevel'],
-        how='outer',
-        suffixes=('', '_population')
+        how='outer'
     )
     
-    # Clean up duplicate columns
-    # Get list of columns to keep (avoiding duplicates)
-    columns_to_keep = []
-    seen_base_columns = set()
-    logging.info("Cleaning up duplicate columns")
-    for col in final_df.columns:
-        base_col = col.split('_')[0] if '_' in col else col
-        if base_col not in seen_base_columns:
-            columns_to_keep.append(col)
-            seen_base_columns.add(base_col)
-    
-    final_df = final_df[columns_to_keep]
+    # Now combine similar coordinates
+    logging.info("Combining similar coordinates")
+    final_df = combine_similar_coordinates(merged_df)
     
     return final_df
 
@@ -114,7 +160,7 @@ if __name__ == "__main__":
     logging.info("Population file: %s", population)
     
     logging.info("Starting data processing")
-    result_df = process_csv_files(housing, household, population)
+    result_df = process_csv_files(household, population)
     output_csv_path = os.path.join(MODULE_DIR, "merged_data.csv")
     df_sorted = result_df.sort_values(by=['longitude', 'latitude'])
     result_df.to_csv(output_csv_path, index=False)
