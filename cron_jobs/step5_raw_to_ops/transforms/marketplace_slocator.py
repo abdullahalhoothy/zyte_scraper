@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS schema_marketplace.census (
     median_age_female REAL,
     household_average_size REAL,
     household_median_size REAL,
+    zoom_level REAL,
     PRIMARY KEY (longitude, latitude)
 );
 
@@ -107,9 +108,9 @@ WITH combined_data AS (
         "MedianAgeMale" as median_age_male,
         "MedianAgeFemale" as median_age_female,
         "HouseholdAverageSize" as household_average_size, 
-        "HouseholdMedianSize" as household_median_size
+        "HouseholdMedianSize" as household_median_size,
+        "ZoomLevel" as zoom_level
     FROM raw_schema_marketplace.saudi_census
-    where "ZoomLevel" = 6
 
     UNION ALL
 
@@ -132,7 +133,8 @@ WITH combined_data AS (
         NULL as median_age_male,
         NULL as median_age_female,
         NULL as household_average_size, 
-        NULL as household_median_size
+        NULL as household_median_size,
+        NULL as zoom_level
     FROM raw_schema_marketplace.canada_census
 ),
 ranked_data AS (
@@ -149,6 +151,7 @@ ranked_data AS (
         median_age_female,
         household_average_size,
         household_median_size,
+        zoom_level,
         ROW_NUMBER() OVER (
             PARTITION BY longitude, latitude
             ORDER BY population DESC NULLS LAST
@@ -170,7 +173,8 @@ INSERT INTO schema_marketplace.census (
     median_age_male,
     median_age_female,
     household_average_size,
-    household_median_size
+    household_median_size,
+    zoom_level
 )
 SELECT DISTINCT
     longitude,
@@ -184,7 +188,8 @@ SELECT DISTINCT
     median_age_male,
     median_age_female,
     household_average_size,
-    household_median_size
+    household_median_size,
+    zoom_level
 FROM ranked_data
 WHERE rn = 1;
     """
