@@ -59,17 +59,19 @@ def get_intel_mac_driver():
 
 
 class Map:
-    def __init__(self, url: str, locations: List[str]):
+    def __init__(self, url: str, locations: List[Dict[str, Any]]):
         """
         Initialize the scraper with configuration for web scraping
 
         """
         # Chrome options for headless browsing
         self.chrome_options = Options()
+        self.chrome_options.add_argument('--ignore-ssl-errors=yes')
+        self.chrome_options.add_argument('--ignore-certificate-errors')
         self.chrome_options.add_argument("--lang=en-US")
         self.chrome_options.add_argument("--start-maximized")
 
-        self.chrome_options.add_argument("--headless")
+        # self.chrome_options.add_argument("--headless")
         self.chrome_options.add_argument("--disable-gpu")
         self.chrome_options.add_argument("--no-sandbox")
         self.chrome_options.add_argument('--memory-pressure-off')
@@ -90,11 +92,12 @@ class Map:
         try:
             self.driver.get(self.url)
             time.sleep(3)
-            self.driver.execute_script("document.body.style.zoom='60%'")
+            # self.driver.set_window_size(1920, 1080)
+            self.driver.execute_script("document.body.style.zoom='50%'")
             self._switch_to_iframe(self.driver)
             # self._hide_unwanted_divs()
             for location in self.locations:
-                self._search_by_location(location)
+                self._search_by_location(location['name'])  
                 for zoom_level in range(1, 7):
                     self._systematic_map_navigation(location)
                     self._zoom_in_on_map()
@@ -239,11 +242,11 @@ class Map:
             elements = self.driver.find_elements(By.CSS_SELECTOR, "g[id*='layer'] path")
             logging.info(f"Found {len(elements)}  elements in the current view.")
             # filter out elements that are not visible
-            elements = [
-                element
-                for element in elements
-                if element.is_displayed() and element.get_attribute("fill") != "none"
-            ]
+            # elements = [
+            #     element
+            #     for element in elements
+            #     if element.is_displayed() and element.get_attribute("fill") != "none"
+            # ]
             logging.info(f"Found {len(elements)} visible elements in the current view.")
             return elements
         except NoSuchElementException:
@@ -438,44 +441,139 @@ class Map:
                     return True
             time.sleep(0.001)
         logging.info("Popup did not appear after attempts.")
-        return False
-
-    def _pan_map(self, x_offset, y_offset):
-        """Pan the map by x and y offset pixels."""
-        map_element = self.driver.find_element(By.ID, "map_root")
-
-        self.actions.move_to_element(map_element)
-        self.actions.click_and_hold()
-        self.actions.move_by_offset(x_offset, y_offset)
-        self.actions.release().perform()
-        time.sleep(0.001)  # Allow map to adjust
-
-    def _get_map_center_coordinates(self):
-        """Get the center coordinates of the map."""
-        map_element = self.driver.find_element(By.ID, "map_root")
-        rect = map_element.rect
-        center_x = rect["width"] / 2
-        center_y = rect["height"] / 2
-        return center_x, center_y
-
-    def _pan_and_center_map(self, element):
-        """Pan the map to center on a specific SVG element."""
+        return False 
+    
+    def drag_map_to_element(self, element):
+        """
+        Simple function to drag the map until element is in view.
+        """
         try:
-            rect = self.driver.execute_script(
-                "return arguments[0].getBoundingClientRect();", element
-            )
-
-            map_center_x, map_center_y = self._get_map_center_coordinates()
-            element_center_x = rect["left"] + rect["width"] / 2
-            element_center_y = rect["top"] + rect["height"] / 2
-            x_offset = element_center_x - map_center_x
-            y_offset = element_center_y - map_center_y
-
-            # Correctly call pan_map with two arguments: x and y offsets
-            self._pan_map(-x_offset, -y_offset)
+            # Get element and map positions
+            positions = self.driver.execute_script("""
+                var elem = arguments[0];
+                var map = document.querySelector('#map_root canvas');
+                var elemRect = elem.getBoundingClientRect();
+                var mapRect = map.getBoundingClientRect();
+                
+                return {
+                    element: {
+                        x: elemRect.left + elemRect.width/2,
+                        y: elemRect.top + elemRect.height/2
+                    },
+                    map: {
+                        x: mapRect.left + mapRect.width/2,
+                        y: mapRect.top + mapRect.height/2
+                    }
+                };
+            """, element)
+            
+            # Calculate how far we need to drag
+            x_offset = positions['map']['x'] - positions['element']['x']
+            y_offset = positions['map']['y'] - positions['element']['y']
+            
+            logging.info(f"Dragging map by offset: ({x_offset}, {y_offset})")
+            
+            # Simulate mouse drag on map
+            self.driver.execute_script("""
+                var map = document.querySelector('#map_root canvas');
+                var mapRect = map.getBoundingClientRect();
+                
+                // Starting point in center of map
+                var startX = mapRect.left + mapRect.width/2;
+                var startY = mapRect.top + mapRect.height/2;
+                
+                // Create and dispatch mouse events
+                function dispatchMouseEvent(type, x, y) {
+                    var event = new MouseEvent(type, {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: x,
+                        clientY: y
+                    });
+                    map.dispatchEvent(event);
+                }
+                
+                // Simulate drag sequence
+                dispatchMouseEvent('mousedown', startX, startY);
+                dispatchMouseEvent('mousemove', startX + arguments[0], startY + arguments[1]);
+                dispatchMouseEvent('mouseup', startX + arguments[0], startY + arguments[1]);
+            """, x_offset, y_offset)
+            
+            # Wait for map to settle
+            time.sleep(0.2)
+            
+            return True
+            
         except Exception as e:
-            logging.error(f"Error centering map on element: {str(e)}")
+            logging.error(f"Error dragging map: {str(e)}")
+            return False
 
+    def test_map_drag(self, element):
+        try:
+            canvas = self.driver.find_element(By.CSS_SELECTOR, "canvas.esri-display-object")
+            print(canvas)
+            self.actions.click_and_hold(canvas).move_by_offset(0, 100).release().perform()
+            time.sleep(.1)  # Wait to see the effect
+            
+        except Exception as e:
+                print(f"Error during drag test: {str(e)}")
+            # Reset mouse position
+        self.actions.reset_actions()
+    
+    # def _pan_map(self, x_offset, y_offset):
+    #     """Pan the map by x and y offset pixels."""
+    #     map_element = self.driver.find_element(By.ID, "map_root")
+
+    #     self.actions.move_to_element(map_element)
+    #     self.actions.click_and_hold()
+    #     self.actions.move_by_offset(x_offset, y_offset)
+    #     self.actions.release().perform()
+    #     time.sleep(0.001)  # Allow map to adjust
+
+    # def _get_map_center_coordinates(self):
+    #     """Get the center coordinates of the map."""
+    #     map_element = self.driver.find_element(By.ID, "map_root")
+    #     rect = map_element.rect
+    #     center_x = rect["width"] / 2
+    #     center_y = rect["height"] / 2
+    #     return center_x, center_y
+
+    # def _pan_and_center_map(self, element):
+    #     """Pan the map to center on a specific SVG element."""
+    #     try:
+    #         rect = self.driver.execute_script(
+    #             "return arguments[0].getBoundingClientRect();", element
+    #         )
+
+    #         map_center_x, map_center_y = self._get_map_center_coordinates()
+    #         element_center_x = rect["left"] + rect["width"] / 2
+    #         element_center_y = rect["top"] + rect["height"] / 2
+    #         x_offset = element_center_x - map_center_x
+    #         y_offset = element_center_y - map_center_y
+
+    #         # Correctly call pan_map with two arguments: x and y offsets
+    #         logging.info(f"Centering map on element at {element_center_x}, {element_center_y}")
+    #         self._pan_map(-x_offset, -y_offset)
+    #     except Exception as e:
+    #         logging.error(f"Error centering map on element: {str(e)}")
+
+    def _is_in_bounding_box(self, Degree, location):
+        """
+        Check if the degree is within the bounding box of the location
+
+        Args:
+            Degree (string): the extracted degree string
+            location (_type_): the location bounding box
+
+        Returns:
+            boolean :  True if the degree is within the bounding box, False otherwise
+        """
+        # parse degree string to get lat and lon (39.861 21.410 Degrees)
+        lat = float(Degree.split()[1])
+        lon = float(Degree.split()[0])
+        return (location['min_lat'] <= lat <= location['max_lat']) and (location['min_lon'] <= lon <= location['max_lon'])
+    
     def _systematic_map_navigation(self, location):
         processed_selectors = set()
         total_boxes_found = 1
@@ -487,14 +585,19 @@ class Map:
             try:
                 selector_path = self._get_selector_path(element)
                 if selector_path and selector_path not in processed_selectors:
-                    # self._pan_and_center_map(element)
                     if self._hover_top_left(element):
                         top_left_degree = self._get_degree_data()
+                        if self._is_in_bounding_box(top_left_degree, location):
+                            logging.info(f"element with top left degree: {top_left_degree} is in the bounding box of {location['name']}")
+                        else:
+                            logging.info(f"element with top left degree: {top_left_degree} is not in the bounding box of {location['name']}")
+                            continue
                     if self._hover_bottom_right(element):
                         bottom_right_degree = self._get_degree_data()
+                    self.test_map_drag(element)
                     if self._click_and_wait_for_popup(element):
                         degree = self._get_degree_data()
-                        data = self._scrape_popup_data(location, selector_path)
+                        data = self._scrape_popup_data(location['name'], selector_path)
                         data["Degree"] = degree
                         data["Top Left Degree"] = top_left_degree
                         data["Bottom Right Degree"] = bottom_right_degree
@@ -656,13 +759,28 @@ class ParentFinder:
 def main():
     url = "https://maps.saudicensus.sa/arcportal/apps/experiencebuilder/experience/?id=f80f2d4e40e149718461492befc96bf9&page=Population"
     locations = [
-        "Jeddah",
-        "Al-Riyadh",
-        "Makkah",
-        # "Al-Madinah", "Al-Qaseem",
-        # "Eastern Region", "Aseer", "Tabouk", "Najran",
-        # "Al-Baha", "Jazan", "Al-Jouf", "Hail",
-        # "Al-Ahsa", "Al-Qatif", "Al-Jubail"
+       {
+            "name":  "Jeddah",
+            "max_lat": 21.904,
+            "min_lat": 21.003,
+            "max_lon": 39.400,
+            "min_lon": 39.034
+       },
+       {
+            "name":  "Riyadh",
+            "max_lat": 25.162,
+            "min_lat": 24.292,
+            "max_lon": 47.346,
+            "min_lon": 46.295
+        },
+       {
+            "name":  "Makkah",
+            "max_lat": 21.594,
+            "min_lat": 21.278,
+            "max_lon": 40.002,
+            "min_lon": 39.69
+            
+       }
     ]
     try:
         # remove file before starting
