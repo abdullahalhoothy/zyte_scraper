@@ -1,3 +1,16 @@
+def datasets():
+    """
+CREATE SCHEMA IF NOT EXISTS schema_marketplace;
+CREATE TABLE IF NOT EXISTS schema_marketplace.datasets
+(
+    filename text COLLATE pg_catalog."default" NOT NULL,
+    request_data jsonb,
+    response_data jsonb,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT datasets_pkey PRIMARY KEY (filename)
+)
+    """
+
 def saudi_real_estate():
     return """
     -- Create schema if it doesn't exist

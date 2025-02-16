@@ -66,7 +66,8 @@ directories = [
     # "saudi_real_estate",
     # "canada_census",
     # "canada_commercial_properties",
-    "saudi_census",
+    # "saudi_census",
+    "saudi_ggl_categories_full_data"
     # {"saudi_census": [
         # "population",
         #   "housing", 
