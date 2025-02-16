@@ -98,7 +98,8 @@ def process_census_data(level):
             return []
         
         # Create directory for JSON files
-        os.makedirs(f'population_json_files/v{level}', exist_ok=True)
+        json_files_path = os.path.join(MODULE_DIR, "population_json_files")
+        os.makedirs(f'{json_files_path}/v{level}', exist_ok=True)
         
         # Process features
         processed_features = []
@@ -128,8 +129,8 @@ def process_census_data(level):
             'type': 'FeatureCollection',
             'features': features
         }
-        
-        with open(f'population_json_files/v{level}/all_features.json', 'w') as f:
+        json_files_path = os.path.join(MODULE_DIR, "population_json_files")
+        with open(f'{json_files_path}/v{level}/all_features.json', 'w') as f:
             json.dump(output_json, f, indent=2)
         
         logging.info(f"Successfully processed {len(processed_features)} features for level {level}")
@@ -192,7 +193,6 @@ def main():
 
         logging.info(f"Processing complete. Processed {len(all_features)} features.")
         logging.info("Files saved:")
-        logging.info("- Individual JSON files in 'population_json_files/v{level}' directories")
         logging.info("- Level-specific CSV files: census_data_level_{8-14}.csv")
         logging.info("- Combined data in 'population.csv'")
 
