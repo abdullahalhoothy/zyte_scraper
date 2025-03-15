@@ -95,11 +95,7 @@ def process_census_data(level):
         
         if not features:
             logging.warning(f"No features found for level {level}")
-            return []
-        
-        # Create directory for JSON files
-        json_files_path = os.path.join(MODULE_DIR, "population_json_files")
-        os.makedirs(f'{json_files_path}/v{level}', exist_ok=True)
+            return []        
         
         # Process features
         processed_features = []
@@ -124,15 +120,6 @@ def process_census_data(level):
             
             processed_features.append(processed_feature)
         
-        # Save all features for this level
-        output_json = {
-            'type': 'FeatureCollection',
-            'features': features
-        }
-        json_files_path = os.path.join(MODULE_DIR, "population_json_files")
-        with open(f'{json_files_path}/v{level}/all_features.json', 'w') as f:
-            json.dump(output_json, f, indent=2)
-        
         logging.info(f"Successfully processed {len(processed_features)} features for level {level}")
         return processed_features
     
@@ -144,6 +131,8 @@ def process_census_data(level):
 
 def save_to_csv(features, filename, fieldnames):
     """Save features to CSV with mapped column names"""
+    
+    filename = os.path.join(MODULE_DIR, filename)
     
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=[COLUMN_MAPPING[field] for field in fieldnames])
