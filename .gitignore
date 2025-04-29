@@ -24,6 +24,8 @@ storage/postgres/sql_logs/**
 /cron_jobs/aquire_data/saudi_real_estate/**/*.pkl
 /cron_jobs/aquire_data/**/*.csv
 .DS_Store
+**/*all_features.json
+
 
 
 # profiling files

@@ -1,5 +1,5 @@
 def datasets():
-    """
+    return """
 CREATE SCHEMA IF NOT EXISTS schema_marketplace;
 CREATE TABLE IF NOT EXISTS schema_marketplace.datasets
 (
