@@ -22,7 +22,8 @@ storage/postgres/sql_logs/**
 /cron_jobs/aquire_data/saudi_real_estate/aqar_data - Copy.csv
 /cron_jobs/aquire_data/saudi_real_estate/**/*.json
 /cron_jobs/aquire_data/saudi_real_estate/**/*.pkl
-/cron_jobs/aquire_data/**/*.csv
+/cron_jobs/aquire_data/saudi_census/**/*.json
+/cron_jobs/aquire_data/saudi_census/**/*.csv
 .DS_Store
 **/*all_features.json
 
