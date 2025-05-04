@@ -130,7 +130,7 @@ def process_census_data(level):
             'features': features
         }
         json_files_path = os.path.join(MODULE_DIR, "population_json_files")
-        with open(f'{json_files_path}/v{level}/features.json', 'w') as f:
+        with open(f'{json_files_path}/v{level}/all_features.json', 'w') as f:
             json.dump(output_json, f, indent=2)
         
         logging.info(f"Successfully processed {len(processed_features)} features for level {level}")
@@ -189,6 +189,7 @@ def main():
 
 
 if __name__ == "__main__":
+    print("Script Starting....")
     main()
 
 
