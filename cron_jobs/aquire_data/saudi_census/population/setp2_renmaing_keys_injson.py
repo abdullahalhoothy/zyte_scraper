@@ -22,28 +22,30 @@ def update_keys(data):
         if "properties" in feature:
             updated_props = {}
             for k, v in feature["properties"].items():
-                updated_key = COLUMN_MAPPING.get(k.upper(), k)  # Use .upper() to match keys like "MAIN_ID"
+                updated_key = COLUMN_MAPPING.get(k.upper(), k)
                 updated_props[updated_key] = v
             feature["properties"] = updated_props
     return data
 
 def process_json_files(folder_path):
-    """Walk through folder and update keys in JSON files."""
+    """Update keys in each features.json and rename to all_features.json in subfolders."""
     for root, _, files in os.walk(folder_path):
         for file in files:
-            if file.endswith(".json"):
+            if file.lower() == "features.json":
                 full_path = os.path.join(root, file)
+                new_path = os.path.join(root, "all_features.json")
                 try:
                     with open(full_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
 
                     updated_data = update_keys(data)
 
-                    # Save the modified file (overwrite the original)
-                    with open(full_path, "w", encoding="utf-8") as f:
+                    with open(new_path, "w", encoding="utf-8") as f:
                         json.dump(updated_data, f, ensure_ascii=False, indent=2)
 
-                    print(f"Updated keys in: {full_path}")
+                    os.remove(full_path)  # delete original features.json
+
+                    print(f"Updated and renamed: {full_path} → {new_path}")
                 except Exception as e:
                     print(f"Failed to process {full_path}: {e}")
 
