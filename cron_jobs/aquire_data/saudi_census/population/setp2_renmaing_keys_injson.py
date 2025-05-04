@@ -1,8 +1,7 @@
 import os
 import json
 
-# Mapping for renaming keys in the properties section
-COLUMN_MAPPING = { 
+COLUMN_MAPPING = {
     'GLEVEL': 'Level',
     'MAIN_ID': 'Main_ID',
     'GID': 'Grid_ID',
@@ -28,26 +27,27 @@ def update_keys(data):
     return data
 
 def process_json_files(folder_path):
-    """Update keys in each features.json and rename to all_features.json in subfolders."""
+    """Update keys in ALL JSON files (keep original filenames)."""
     for root, _, files in os.walk(folder_path):
         for file in files:
-            if file.lower() == "features.json":
-                full_path = os.path.join(root, file)
-                new_path = os.path.join(root, "all_features.json")
+            if file.lower().endswith('.json'):  # Process ALL JSON files
+                file_path = os.path.join(root, file)
                 try:
-                    with open(full_path, "r", encoding="utf-8") as f:
+                    with open(file_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
-
+                    
                     updated_data = update_keys(data)
-
-                    with open(new_path, "w", encoding="utf-8") as f:
+                    
+                    # Write back to the SAME file
+                    with open(file_path, "w", encoding="utf-8") as f:
                         json.dump(updated_data, f, ensure_ascii=False, indent=2)
-
-                    os.remove(full_path)  # delete original features.json
-
-                    print(f"Updated and renamed: {full_path} → {new_path}")
+                    
+                    print(f"Updated keys for: {file_path}")
+                
+                except json.JSONDecodeError:
+                    print(f"Skipping invalid JSON: {file_path}")
                 except Exception as e:
-                    print(f"Failed to process {full_path}: {e}")
+                    print(f"Error processing {file_path}: {e}")
 
 if __name__ == "__main__":
     json_folder = os.path.join(os.path.dirname(__file__), "population_json_files")
