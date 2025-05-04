@@ -122,7 +122,10 @@ gcp_manager = GCPBucketManager(
     bucket_name="s-locator",
     credentials_path="cron_jobs/ggl_bucket_sa.json",
 )
-
+gcp_manager_dev = GCPBucketManager(
+    bucket_name="dev-s-locator",
+    credentials_path="cron_jobs/ggl_bucket_sa.json",
+)
 directories = [
     # "generate_economic_slocator_data",
     # "generate_housing_slocator_data",
@@ -130,19 +133,14 @@ directories = [
     # "saudi_real_estate",
     # "canada_census",
     # "canada_commercial_properties",
-    # "saudi_census",
+    # "saudi_census"
     # "saudi_ggl_categories_full_data"
-    # {"saudi_census": [
-    #     # "population",
-    #       "housing", 
-    #       "household"
-    #       ]},
-    {"temp_test_dir": [
-        "sub1",
-        "sub2",
-        # "sub3"
-    ]},
-    "temp_test_dir_2"
+    {"saudi_census": [
+        "population",
+          "housing", 
+          "household"
+          ]},
     ]
 
+dev_upload_sccuess = upload_directory_to_gcp(directories , gcp_manager_dev)
 upload_success = upload_directory_to_gcp(directories, gcp_manager)
