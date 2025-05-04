@@ -108,3 +108,21 @@ class GCPBucketManager:
             print(f"Successfully downloaded {gcp_path} to {local_path}")
         except Exception as e:
             raise Exception(f"Error downloading CSV from {gcp_path}: {str(e)}")
+
+
+    # Add this method to your GCPBucketManager class
+    def upload_file_directly(self, file_path: str, destination_path: str, content_type: str) -> None:
+        """
+        Upload any file directly to GCP bucket without loading it into memory.
+        Args:
+            file_path (str): Local path to file
+            destination_path (str): Destination path in bucket
+            content_type (str): Content type of the file
+        """
+        try:
+            blob = self.bucket.blob(destination_path)
+            with open(file_path, "rb") as f:
+                blob.upload_from_file(f, content_type=content_type)
+            print(f"Successfully uploaded {file_path} to {destination_path}")
+        except Exception as e:
+            raise Exception(f"Error uploading file to {destination_path}: {str(e)}")
