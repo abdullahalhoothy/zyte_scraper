@@ -81,7 +81,7 @@ def upload_directory_to_gcp(
                 # For subdirectories, use the sub_dir name in the GCS path
                 # This preserves the logical structure rather than the physical one
                 if sub_dir:
-                    gcs_rel_path = sub_dir if rel_path == sub_dir else f"{sub_dir}/{date}/{os.path.relpath(root, abs_source_path)}"
+                    gcs_rel_path = f"{sub_dir}/{date}" if rel_path == sub_dir else f"{sub_dir}/{date}/{os.path.relpath(root, abs_source_path)}"
                 else:
                     gcs_rel_path = f"{rel_path}/{date}"
                
