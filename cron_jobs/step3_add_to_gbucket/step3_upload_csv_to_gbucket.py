@@ -90,22 +90,20 @@ def upload_directory_to_gcp(
                     # Only process CSV and JSON files
                     if file.lower().endswith(('.csv', '.json')):
                         local_file_path = os.path.join(root, file)
-                       
+                    
                         # Construct the destination path in GCP
                         if include_date:
                             gcp_path = f"{base_gcp_path}/{gcs_rel_path}/{date}/{file}"
                         else:
                             gcp_path = f"{base_gcp_path}/{gcs_rel_path}/{file}"
-                       
+                    
                         # Upload file based on its extension
                         try:
                             if file.lower().endswith('.csv'):
-                                gcp_manager.upload_csv(local_file_path, gcp_path)
+                                gcp_manager.upload_file_directly(local_file_path, gcp_path, "text/csv")
                             elif file.lower().endswith('.json'):
-                                with open(local_file_path, 'r') as f:
-                                    data = json.load(f)
-                                gcp_manager.upload_json(data, gcp_path)
-                           
+                                gcp_manager.upload_file_directly(local_file_path, gcp_path, "application/json")
+                        
                             print(f"Uploaded {local_file_path} to {gcp_path}")
                         except Exception as e:
                             print(f"Failed to upload {local_file_path}: {str(e)}")
