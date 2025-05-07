@@ -482,16 +482,14 @@ def get_predicted_income(
 
     city_center = income_data.union_all().convex_hull.centroid
 
-    income_data["euc_distance_from_center"] = income_data.geometry.map(
-        lambda x: x.centroid.distance(city_center)
+    income_data["euc_distance_from_center"] = income_data.geometry.centroid.distance(
+        city_center
     )
-
-    income_data["x_distance_from_center"] = income_data.geometry.map(
-        lambda x: x.centroid.x - city_center.x
+    income_data["x_distance_from_center"] = (
+        income_data.geometry.centroid.x - city_center.x
     )
-
-    income_data["y_distance_from_center"] = income_data.geometry.map(
-        lambda x: x.centroid.y - city_center.y
+    income_data["y_distance_from_center"] = (
+        income_data.geometry.centroid.y - city_center.y
     )
 
     models = get_saved_models()
@@ -502,7 +500,63 @@ def get_predicted_income(
     mask = ~grid["TotalPopulation"].isna()
     grid = grid.loc[mask]
 
-    income_data = gpd.sjoin(grid, income_data[["geometry", "income"]], how="left", predicate="within")
-    income_data.set_crs(epsg=4326).to_crs(epsg=4326).to_file(os.path.join(dir, "income_data.geojson"), driver='GeoJSON')
-    
+    income_data = (
+        gpd.sjoin(
+            grid,
+            income_data[
+                [
+                    "geometry",
+                    "income",
+                    "euc_distance_from_center",
+                    "x_distance_from_center",
+                    "y_distance_from_center",
+                ]
+            ],
+            how="inner",
+            predicate=None,
+        )
+        .groupby(by="geometry", observed=False)
+        .mean()
+        .reset_index()
+        .drop("index_right", axis=1)
+    )
+
+    income_data = gpd.GeoDataFrame(income_data)
+    income_data.set_crs(epsg=4326).to_crs(epsg=4326).to_file(
+        os.path.join(dir, "income_data.geojson"), driver="GeoJSON"
+    )
+
     return income_data
+
+
+def adapt(finner_data, coarser_grid):
+    merged = (
+        gpd.sjoin(
+            finner_data.set_crs(epsg=4326).to_crs(epsg=4326),
+            coarser_grid.set_crs(epsg=4326).to_crs(epsg=4326),
+            how="right",
+            predicate=None,
+        )
+        .groupby(by="geometry", observed=False)
+        .mean()
+        .reset_index()
+    )
+
+    merged = gpd.GeoDataFrame(merged)[
+        [
+            "geometry",
+            "income",
+            "euc_distance_from_center",
+            "x_distance_from_center",
+            "y_distance_from_center",
+        ]
+    ]
+
+    merged = gpd.sjoin(
+        coarser_grid.set_crs(epsg=4326).to_crs(epsg=4326),
+        merged,
+        how="inner",
+        predicate="within",
+    ).drop("index_right", axis=1)
+
+    return merged
