@@ -379,14 +379,14 @@ def train_model(income_data):
 
         params = {
             "objective": "reg:squarederror",
-            "learning_rate": 0.02,
+            "learning_rate": 0.025,
             "max_depth": 12,
             "min_child_weight": 2,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "gamma": 0.1,
-            "reg_alpha": 0.1,
-            "reg_lambda": 1.0,
+            "subsample": 0.80,
+            "colsample_bytree": 0.80,
+            "gamma": 0.25,
+            "reg_alpha": 0.40,
+            "reg_lambda": 3.5,
             "tree_method": "hist",
             "eval_metric": "mae",
             "verbosity": 0,
@@ -396,7 +396,7 @@ def train_model(income_data):
         model = xgb.train(
             params,
             dtrain,
-            num_boost_round=3000,
+            num_boost_round=500,
             evals=evals,
             early_stopping_rounds=10,
             verbose_eval=False,
@@ -558,4 +558,3 @@ def adapt(finner_data, coarser_grid):
     ).drop("index_right", axis=1)
 
     return merged
-
