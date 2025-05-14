@@ -4,12 +4,29 @@ import pandas as pd
 import geopandas as gpd
 from sqlalchemy import create_engine
 from shapely.geometry import box
+from scipy.spatial import cKDTree
 
 import logging
 from sklearn.model_selection import RepeatedKFold
 from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import mean_absolute_error, r2_score
-import xgboost as xgb
+
+import os
+import logging
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import RepeatedKFold
+from sklearn.preprocessing import RobustScaler
+from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.ensemble import (
+    RandomForestRegressor,
+    StackingRegressor,
+
+)
+from sklearn.linear_model import LinearRegression
+from xgboost import XGBRegressor
+from catboost import CatBoostRegressor
+import joblib
 
 
 def load_data(db_access_key, city):
@@ -65,6 +82,37 @@ def load_data(db_access_key, city):
         f"cache/{city[-1].lower()}_luxurious_areas.csv"
     ).rename(columns={"lat": "latitude", "lng": "longitude"})
 
+    dental_clinic = (
+        gpd.read_file("cache/geojson_saudi_dental_clinic_20250512_110022.geojson")
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
+    )
+    electrician = (
+        gpd.read_file("cache/geojson_saudi_electrician_20250512_122401.geojson")
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
+    )
+    plumber = (
+        gpd.read_file("cache/geojson_saudi_plumber_20250512_123014.geojson")
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
+    )
+    police = (
+        gpd.read_file("cache/geojson_saudi_police_20250512_103953.geojson")
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
+    )
+    embassy = (
+        gpd.read_file("cache/geojson_saudi_embassy_20250512_102151.geojson")
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
+    )
+    university = (
+        gpd.read_file("cache/geojson_saudi_university_20250512_011237.geojson")
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
+    )
+
     return (
         real_estate_data,
         housing_data,
@@ -74,6 +122,12 @@ def load_data(db_access_key, city):
         luxury_hotels,
         gyms,
         luxurious_areas,
+        dental_clinic,
+        electrician,
+        plumber,
+        police,
+        embassy,
+        university,
     )
 
 
@@ -86,10 +140,20 @@ def get_geodataframes(
     luxury_hotels,
     gyms,
     luxurious_areas,
+    dental_clinic,
+    electrician,
+    plumber,
+    police,
+    embassy,
+    university,
     city,
+    is_training=True
 ):
+    if is_training:
+        grid_size = 0.01
+    else:
+        grid_size = np.round((population_data.geometry.area.max()) ** 0.5, 5) * 2.5
 
-    grid_size = np.round((population_data.geometry.area.max()) ** 0.5, 5) * 2.5
     points = population_data.geometry.map(lambda x: x.centroid)
     population_data["longitude"] = points.map(lambda x: x.x)
     population_data["latitude"] = points.map(lambda x: x.y)
@@ -108,11 +172,15 @@ def get_geodataframes(
     )  # some cities have '-' in them like Al-Riyadh but this is not consistently present in other datasets so removing this "-"
 
     real_estate_data = real_estate_data.loc[real_estate_data.city.isin(city)]
-    real_estate_data = gpd.GeoDataFrame(
-        real_estate_data,
-        geometry=gpd.points_from_xy(
-            real_estate_data.longitude, real_estate_data.latitude
-        ),
+    real_estate_data = (
+        gpd.GeoDataFrame(
+            real_estate_data,
+            geometry=gpd.points_from_xy(
+                real_estate_data.longitude, real_estate_data.latitude
+            ),
+        )
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
     )
 
     real_estate_data = real_estate_data.assign(
@@ -127,11 +195,15 @@ def get_geodataframes(
 
     # Prepare census data with age calculation
     population_data = population_data[["TotalPopulation", "longitude", "latitude"]]
-    population_data = gpd.GeoDataFrame(
-        population_data,
-        geometry=gpd.points_from_xy(
-            population_data.longitude, population_data.latitude
-        ),
+    population_data = (
+        gpd.GeoDataFrame(
+            population_data,
+            geometry=gpd.points_from_xy(
+                population_data.longitude, population_data.latitude
+            ),
+        )
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
     )
 
     # Prepare housing data
@@ -141,46 +213,72 @@ def get_geodataframes(
         latitude=degree_split.map(lambda x: float(x[1])),
         longitude=degree_split.map(lambda x: float(x[0])),
     )[["latitude", "longitude", "TotalDwellings"]]
-    housing_data = gpd.GeoDataFrame(
-        housing_data,
-        geometry=gpd.points_from_xy(housing_data.longitude, housing_data.latitude),
+    housing_data = (
+        gpd.GeoDataFrame(
+            housing_data,
+            geometry=gpd.points_from_xy(housing_data.longitude, housing_data.latitude),
+        )
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
     )
 
     # Prepare restaurant data
-    restaurants_data = gpd.GeoDataFrame(
-        restaurants_data[["rating", "longitude", "latitude"]],
-        geometry=gpd.points_from_xy(
-            restaurants_data.longitude, restaurants_data.latitude
-        ),
+    restaurants_data = (
+        gpd.GeoDataFrame(
+            restaurants_data[["rating", "longitude", "latitude"]],
+            geometry=gpd.points_from_xy(
+                restaurants_data.longitude, restaurants_data.latitude
+            ),
+        )
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
     )
 
     # Prepare royal houses data
     royal_houses = royal_houses[["name", "longitude", "latitude"]]
-    royal_houses = gpd.GeoDataFrame(
-        royal_houses,
-        geometry=gpd.points_from_xy(royal_houses.longitude, royal_houses.latitude),
+    royal_houses = (
+        gpd.GeoDataFrame(
+            royal_houses,
+            geometry=gpd.points_from_xy(royal_houses.longitude, royal_houses.latitude),
+        )
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
     )
 
     # Prepare luxury hotels data
     luxury_hotels = luxury_hotels[["name", "longitude", "latitude"]]
-    luxury_hotels = gpd.GeoDataFrame(
-        luxury_hotels,
-        geometry=gpd.points_from_xy(luxury_hotels.longitude, luxury_hotels.latitude),
+    luxury_hotels = (
+        gpd.GeoDataFrame(
+            luxury_hotels,
+            geometry=gpd.points_from_xy(
+                luxury_hotels.longitude, luxury_hotels.latitude
+            ),
+        )
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
     )
 
     # Prepare gyms data
     gyms = gyms[["name", "longitude", "latitude"]]
-    gyms = gpd.GeoDataFrame(
-        gyms, geometry=gpd.points_from_xy(gyms.longitude, gyms.latitude)
+    gyms = (
+        gpd.GeoDataFrame(
+            gyms, geometry=gpd.points_from_xy(gyms.longitude, gyms.latitude)
+        )
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
     )
 
     # Prepare luxurious areas data
     luxurious_areas = luxurious_areas[["name", "longitude", "latitude"]]
-    luxurious_areas = gpd.GeoDataFrame(
-        luxurious_areas,
-        geometry=gpd.points_from_xy(
-            luxurious_areas.longitude, luxurious_areas.latitude
-        ),
+    luxurious_areas = (
+        gpd.GeoDataFrame(
+            luxurious_areas,
+            geometry=gpd.points_from_xy(
+                luxurious_areas.longitude, luxurious_areas.latitude
+            ),
+        )
+        .set_crs(epsg=4326)
+        .to_crs(epsg=4326)
     )
 
     city_boundaries = real_estate_data.union_all().convex_hull
@@ -193,6 +291,12 @@ def get_geodataframes(
     luxurious_areas = luxurious_areas.loc[luxurious_areas.within(city_boundaries)]
     gyms = gyms.loc[gyms.within(city_boundaries)]
     luxurious_areas = luxurious_areas.loc[luxurious_areas.within(city_boundaries)]
+    dental_clinic = dental_clinic.loc[dental_clinic.within(city_boundaries)]
+    electrician = electrician.loc[electrician.within(city_boundaries)]
+    plumber = plumber.loc[plumber.within(city_boundaries)]
+    police = police.loc[police.within(city_boundaries)]
+    embassy = embassy.loc[embassy.within(city_boundaries)]
+    university = university.loc[university.within(city_boundaries)]
 
     return (
         real_estate_data,
@@ -203,6 +307,12 @@ def get_geodataframes(
         luxury_hotels,
         gyms,
         luxurious_areas,
+        dental_clinic,
+        electrician,
+        plumber,
+        police,
+        embassy,
+        university,
         grid_size,
     )
 
@@ -216,6 +326,12 @@ def make_grids(
     luxury_hotels,
     gyms,
     luxurious_areas,
+    dental_clinic,
+    electrician,
+    plumber,
+    police,
+    embassy,
+    university,
     grid_size,
 ):
     # Create grid cells
@@ -243,9 +359,19 @@ def make_grids(
         luxury_hotels, grid, how="inner", predicate="within"
     )
     joined_gyms = gpd.sjoin(gyms, grid, how="inner", predicate="within")
+
     joined_luxurious_areas = gpd.sjoin(
         luxurious_areas, grid, how="inner", predicate="within"
     )
+
+    joined_dental_clinic = gpd.sjoin(
+        dental_clinic, grid, how="inner", predicate="within"
+    )
+    joined_electrician = gpd.sjoin(electrician, grid, how="inner", predicate="within")
+    joined_plumber = gpd.sjoin(plumber, grid, how="inner", predicate="within")
+    joined_police = gpd.sjoin(police, grid, how="inner", predicate="within")
+    joined_embassy = gpd.sjoin(embassy, grid, how="inner", predicate="within")
+    joined_university = gpd.sjoin(university, grid, how="inner", predicate="within")
 
     # Aggregate data into the grid
     grid = pd.concat(
@@ -277,6 +403,24 @@ def make_grids(
             joined_luxurious_areas.groupby("index_right")["name"]
             .count()
             .rename("luxury_area_count"),
+            joined_dental_clinic.groupby("index_right")["name"]
+            .count()
+            .rename("joined_dental_clinic"),
+            joined_electrician.groupby("index_right")["name"]
+            .count()
+            .rename("joined_electrician"),
+            joined_plumber.groupby("index_right")["name"]
+            .count()
+            .rename("joined_plumber"),
+            joined_police.groupby("index_right")["name"]
+            .count()
+            .rename("joined_police"),
+            joined_embassy.groupby("index_right")["name"]
+            .count()
+            .rename("joined_embassy"),
+            joined_university.groupby("index_right")["name"]
+            .count()
+            .rename("joined_university"),
         ],
         axis=1,
     )
@@ -286,6 +430,16 @@ def make_grids(
     )
 
     return grid
+
+
+def idw_interpolation(xy_points, values, xy_targets, k=6, power=2):
+    tree = cKDTree(xy_points)
+    dists, idxs = tree.query(xy_targets, k=k)
+    dists = np.maximum(dists, 1e-12)  # avoid division by zero
+    weights = 1 / (dists**power)
+    weights /= weights.sum(axis=1, keepdims=True)
+    interpolated = np.sum(values[idxs] * weights, axis=1)
+    return interpolated
 
 
 def get_dataset(
@@ -308,31 +462,29 @@ def get_dataset(
         pd.read_json("cache/ignore_zad_Output_data.json").features
     )
 
-    income_data = gpd.sjoin(grid, income_data, how="right", predicate="within")
-    income_data = (
-        income_data.loc[:, grid.columns.to_list() + ["Average Male Income"]]
-        .groupby("geometry", observed=False)
-        .agg(
-            {
-                "TotalPopulation": "sum",
-                "selling_price": "mean",
-                "renting_price": "mean",
-                "villa_count": "sum",
-                "apartment_count": "sum",
-                "number_of_properties_above_average_price": "sum",
-                "restaurant_count": "sum",
-                "TotalDwellings": "sum",
-                "royal_property_count": "sum",
-                "luxury_hotel_count": "sum",
-                "gym_count": "sum",
-                "luxury_area_count": "sum",
-                "villa_to_apartment_ratio": "mean",
-                "Average Male Income": "mean",
-            }
-        )
+    bounds = grid[["geometry", "TotalPopulation"]].dropna().union_all().convex_hull
+    mask = income_data[["geometry", "Average Male Income"]].within(bounds)
+    income_data = income_data.loc[mask][["geometry", "Average Male Income"]]
+
+    bounds = income_data.union_all().convex_hull
+    mask = grid.within(bounds)
+    grid = grid.loc[mask]
+
+    income_data = income_data[["geometry", "Average Male Income"]].assign(
+        geometry=lambda x: x.geometry.centroid
     )
-    income_data = gpd.GeoDataFrame(income_data.reset_index()).set_crs(epsg=4326)
-    income_data = income_data.rename(columns={"Average Male Income": "income"})
+    mask = ~grid[["geometry", "TotalPopulation"]].isna().any(axis=1)
+    grid = grid.loc[mask]
+
+    xy_points = np.array([(point.x, point.y) for point in income_data.geometry])
+    values = income_data["Average Male Income"].values
+    xy_targets = np.array(
+        [(poly.centroid.x, poly.centroid.y) for poly in grid.geometry]
+    )
+    interpolated_values = idw_interpolation(xy_points, values, xy_targets, k=6, power=2)
+    grid["income"] = interpolated_values
+
+    income_data = gpd.GeoDataFrame(grid.reset_index(drop=True)).set_crs(epsg=4326)
 
     mask = ~income_data.income.isna()
     income_data = income_data.loc[mask]
@@ -340,106 +492,127 @@ def get_dataset(
     income_data["euc_distance_from_center"] = income_data.geometry.map(
         lambda x: x.centroid.distance(city_center)
     )
-    income_data["x_distance_from_center"] = income_data.geometry.map(
-        lambda x: x.centroid.x - city_center.x
-    )
-    income_data["y_distance_from_center"] = income_data.geometry.map(
-        lambda x: x.centroid.y - city_center.y
-    )
 
     return income_data
 
 
 def train_model(income_data):
-
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logger = logging.getLogger()
-
     X = income_data.drop("geometry", axis=1).sort_index(axis=1).fillna(0.0)
-    y = X.pop("income")
-    y = np.log1p(y)
-
-    scaler = RobustScaler().fit(X)
+    y = X.pop("income").copy()
+    mask = y > 0
+    y.loc[~mask] = y.loc[mask].mean()
+    # y = np.log1p(y)
+    scaler = RobustScaler().fit(X.values)
 
     kf = RepeatedKFold(n_splits=5, n_repeats=10, random_state=42)
+    n_estimators = 350
+    depth = 8
+    lr = 0.05
 
-    train_mae_list, val_mae_list = [], []
-    train_r2_list, val_r2_list = [], []
+    base_learners = {
+        "xgb": XGBRegressor(
+            objective="reg:squarederror",
+            learning_rate=lr,
+            max_depth=depth,
+            n_estimators=n_estimators,
+            subsample=0.85,
+            colsample_bytree=0.85,
+            gamma=0.25,
+            reg_alpha=0.35,
+            reg_lambda=0.65,
+            tree_method="hist",
+            verbosity=0,
+        ),
+        "cat": CatBoostRegressor(
+            iterations=n_estimators,
+            learning_rate=lr,
+            depth=depth,
+            l2_leaf_reg=6.5,
+            subsample=0.85,
+            verbose=0,
+            random_seed=42,
+        ),
+        "rf": RandomForestRegressor(
+            n_estimators=n_estimators,
+            max_depth=None,
+            min_samples_split=3,
+            bootstrap=True,
+            random_state=42,
+        ),
+    }
 
-    models = []
+    metrics = {
+        m: {"train_mae": [], "val_mae": [], "train_r2": [], "val_r2": []}
+        for m in base_learners
+    }
+
+    os.makedirs("models", exist_ok=True)
+
     for fold, (train_idx, val_idx) in enumerate(kf.split(X), start=1):
-        logger.info(f"Fold {fold}:")
-
+        logger.info(f"=== Fold {fold} ===")
         X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
-        X_train_scaled = scaler.transform(X_train)
-        X_val_scaled = scaler.transform(X_val)
-        dtrain = xgb.DMatrix(X_train_scaled, label=y_train)
-        dval = xgb.DMatrix(X_val_scaled, label=y_val)
 
-        params = {
-            "objective": "reg:squarederror",
-            "learning_rate": 0.025,
-            "max_depth": 12,
-            "min_child_weight": 2,
-            "subsample": 0.80,
-            "colsample_bytree": 0.80,
-            "gamma": 0.25,
-            "reg_alpha": 0.40,
-            "reg_lambda": 3.5,
-            "tree_method": "hist",
-            "eval_metric": "mae",
-            "verbosity": 0,
-        }
+        X_train_s = scaler.transform(X_train.values)
+        X_val_s = scaler.transform(X_val.values)
 
-        evals = [(dtrain, "train"), (dval, "eval")]
-        model = xgb.train(
-            params,
-            dtrain,
-            num_boost_round=500,
-            evals=evals,
-            early_stopping_rounds=10,
-            verbose_eval=False,
+        for name, model in base_learners.items():
+            mdl = model.__class__(**model.get_params())
+            mdl.fit(X_train_s, y_train.values)
+            y_train_pred = mdl.predict(X_train_s)
+            y_val_pred = mdl.predict(X_val_s)
+
+            t_mae = mean_absolute_error(y_train, y_train_pred)
+            v_mae = mean_absolute_error(y_val, y_val_pred)
+            t_r2 = r2_score(y_train, y_train_pred)
+            v_r2 = r2_score(y_val, y_val_pred)
+
+            metrics[name]["train_mae"].append(t_mae)
+            metrics[name]["val_mae"].append(v_mae)
+            metrics[name]["train_r2"].append(t_r2)
+            metrics[name]["val_r2"].append(v_r2)
+
+            logger.info(
+                f"{name.upper():<5}  Train MAE: {t_mae:.4f}, R2: {t_r2:.4f} | "
+                f"Val MAE: {v_mae:.4f}, R2: {v_r2:.4f}"
+            )
+            joblib.dump(mdl, f"models/{name}_fold{fold}.joblib")
+        logger.info("")
+
+    logger.info("=== CV Summary ===")
+    for name in base_learners:
+        logger.info(
+            f"{name.upper():<5} Mean Train MAE: {np.mean(metrics[name]['train_mae']):.4f}, "
+            f"Mean Val MAE: {np.mean(metrics[name]['val_mae']):.4f}, "
+            f"Mean Val R2: {np.mean(metrics[name]['val_r2']):.4f}"
         )
 
-        y_train_pred = model.predict(dtrain)
-        y_val_pred = model.predict(dval)
-
-        train_mae = mean_absolute_error(y_train, y_train_pred)
-        val_mae = mean_absolute_error(y_val, y_val_pred)
-        train_r2 = r2_score(y_train, y_train_pred)
-        val_r2 = r2_score(y_val, y_val_pred)
-
-        train_mae_list.append(train_mae)
-        val_mae_list.append(val_mae)
-        train_r2_list.append(train_r2)
-        val_r2_list.append(val_r2)
-
-        logger.info(f"  Train MAE: {train_mae:.4f}, R²: {train_r2:.4f}")
-        logger.info(f"  Val   MAE: {val_mae:.4f}, R²: {val_r2:.4f}\n")
-        models.append(model)
-
-    logger.info("=== Cross-Validation Summary ===")
-    logger.info(
-        f"Mean Train MAE: {np.mean(train_mae_list):.4f}, R²: {np.mean(train_r2_list):.4f}"
+    logger.info("Training stacking ensemble on full dataset...")
+    X_full_s = scaler.transform(X)
+    estimators = [(name, base_learners[name]) for name in base_learners]
+    stack = StackingRegressor(
+        estimators=estimators,
+        final_estimator=LinearRegression(),
+        passthrough=True,
+        n_jobs=-1,
     )
-    logger.info(
-        f"Mean Val   MAE: {np.mean(val_mae_list):.4f}, R²: {np.mean(val_r2_list):.4f}"
-    )
-    os.makedirs("models", exist_ok=True)
-    for i, model in enumerate(models):
-        model.save_model(f"models/model_{i}.json")
-    return models
+    stack.fit(X_full_s, y)
+    joblib.dump(stack, "models/stacking_ensemble.joblib")
+
+    logger.info("Ensemble saved as models/stacking_ensemble.joblib")
+    return metrics, base_learners, stack
 
 
 def get_saved_models():
     """Load saved models from the 'models' directory."""
     models = []
     for path in os.listdir("models"):
-        if path.endswith(".json"):
-            model = xgb.Booster()
-            model.load_model(os.path.join("models", path))
-            models.append(model)
+        if path.endswith(".joblib"):
+            with open(os.path.join("models", path), "rb") as f:
+                model = joblib.load(f)
+                models.append(model)
     return models
 
 
@@ -448,16 +621,15 @@ def predict_income(income_data, models):
     X = income_data.drop("geometry", axis=1).sort_index(axis=1).fillna(0.0)
     scaler = RobustScaler().fit(X)
 
-    X_scaled = scaler.transform(X)
-    dtest = xgb.DMatrix(X_scaled)
+    X_scaled = scaler.transform(X.values)
 
     predictions = []
     for model in models:
-        pred = model.predict(dtest)
-        predictions.append(pred)
+        pred = model.predict(X_scaled)
+        predictions.append(pred.squeeze())
 
-    y = np.mean(predictions, axis=0)
-    return np.expm1(y)
+    y = np.mean(np.stack(predictions, axis=0), axis=0)
+    return y #np.expm1(y)
 
 
 def get_predicted_income(
@@ -466,34 +638,27 @@ def get_predicted_income(
     dir="",
 ):
 
-    data = load_data(
+    data_ = load_data(
         db_access_key,
         city,
     )
 
-    data = get_geodataframes(*data, city)
-    grid = make_grids(*data[:-1], 0.03408)
+    data = get_geodataframes(*data_, city)
+    grid = make_grids(*data)
     mask = ~grid["TotalPopulation"].isna()
     grid = grid.loc[mask]
 
-    income_data = grid
-
+    income_data = grid.set_crs(epsg=4326).to_crs(epsg=4326)
     city_center = income_data.union_all().convex_hull.centroid
-
     income_data["euc_distance_from_center"] = income_data.geometry.centroid.distance(
         city_center
-    )
-    income_data["x_distance_from_center"] = (
-        income_data.geometry.centroid.x - city_center.x
-    )
-    income_data["y_distance_from_center"] = (
-        income_data.geometry.centroid.y - city_center.y
     )
 
     models = get_saved_models()
     y = predict_income(income_data, models)
     income_data["income"] = y
 
+    data = get_geodataframes(*data_, city, is_training=False)
     grid = make_grids(*data)
     mask = ~grid["TotalPopulation"].isna()
     grid = grid.loc[mask]
@@ -506,8 +671,6 @@ def get_predicted_income(
                     "geometry",
                     "income",
                     "euc_distance_from_center",
-                    "x_distance_from_center",
-                    "y_distance_from_center",
                 ]
             ],
             how="inner",
