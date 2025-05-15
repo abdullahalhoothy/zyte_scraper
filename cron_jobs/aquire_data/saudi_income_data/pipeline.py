@@ -305,7 +305,7 @@ def get_dataset(
     grid = grid.loc[mask]
 
     income_data = gpd.GeoDataFrame.from_features(
-        pd.read_json("cache/Output_data_20250509_101734.json").features
+        pd.read_json("cache/ignore_zad_Output_data.json").features
     )
 
     income_data = gpd.sjoin(grid, income_data, how="right", predicate="within")

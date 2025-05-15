@@ -3,12 +3,18 @@ import aiohttp
 import json
 import os
 from datetime import datetime
+from time import sleep
 
+# Define base URL as a constant to avoid repetition
+BASE_URL = "http://localhost:7005/fastapi"
 
-async def make_api_call(session, boolean_query, token, page_num):
-    url = "http://localhost:7000/fastapi/fetch_dataset"
+LOGIN_URL = f"{BASE_URL}/login"
+FETCH_DATASET_URL = f"{BASE_URL}/fetch_dataset"
+
+async def make_api_call(session, boolean_query, token, page_num, search_type, obtained_auth_token):
+
     headers = {
-        "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImEwODA2N2Q4M2YwY2Y5YzcxNjQyNjUwYzUyMWQ0ZWZhNWI2YTNlMDkiLCJ0eXAiOiJKV1QifQ.eyJuYW1lIjoidV9qZV91IiwiaXNzIjoiaHR0cHM6Ly9zZWN1cmV0b2tlbi5nb29nbGUuY29tL2Rldi1zLWxvY2F0b3IiLCJhdWQiOiJkZXYtcy1sb2NhdG9yIiwiYXV0aF90aW1lIjoxNzQwNDI1MjY0LCJ1c2VyX2lkIjoiSm5hR0RDS29Tb1d0ajZOV0VWVzhNRE1CQ2lBMiIsInN1YiI6IkpuYUdEQ0tvU29XdGo2TldFVlc4TURNQkNpQTIiLCJpYXQiOjE3NDE5MjI1OTAsImV4cCI6MTc0MTkyNjE5MCwiZW1haWwiOiJ1X2plX3UyMDA4QGxpdmUuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImZpcmViYXNlIjp7ImlkZW50aXRpZXMiOnsiZW1haWwiOlsidV9qZV91MjAwOEBsaXZlLmNvbSJdfSwic2lnbl9pbl9wcm92aWRlciI6InBhc3N3b3JkIn19.Xj2BCUBkwoabwwJY-r2KDq2pLQ2NyMGCdW-8qDDlhZogIn-x-SPNTssLOV4MlxSsXOdLJWYElvfyuPVsyDe-wsvWPlmxPDvLGcuAt7AePapMjjFYn8-zpTUajUfzEEDNBG4aQ1JTdHusYSx_zfSBW9TziYqbnilxoZlbYRVQ44aCW-Xpb_fbc3SEdG4iT90M1d3NJkmRASwFeSsoTHPgyntktKfVywFWqxClh89ZljilY_t0ppJ4U5bfXzHPhRgUBLwyStX_G8ljByPMeGgdv1YHlfgzJ3cQNlmZ5Ia9NZdBGa4D8FHhAAwtQfUdXgq4i6Kvqd09x8SD8spZtbx4zQ"
+        "Authorization": f"Bearer {obtained_auth_token}"
     }
 
     request_body = {
@@ -22,7 +28,7 @@ async def make_api_call(session, boolean_query, token, page_num):
             "boolean_query": boolean_query,
             "action": "full data",
             "page_token": token,
-            "search_type": "default",
+            "search_type": search_type,
             "text_search": "",
             "zoom_level": 0,
             "radius": 30000,
@@ -30,7 +36,7 @@ async def make_api_call(session, boolean_query, token, page_num):
     }
 
     try:
-        async with session.post(url, json=request_body, headers=headers) as response:
+        async with session.post(FETCH_DATASET_URL, json=request_body, headers=headers) as response:
             print(f"Fetching page {page_num}, token: {token}")
             response.raise_for_status()
             return await response.json()
@@ -39,7 +45,7 @@ async def make_api_call(session, boolean_query, token, page_num):
         # Retry once
         try:
             async with session.post(
-                url, json=request_body, headers=headers
+                FETCH_DATASET_URL, json=request_body, headers=headers
             ) as response:
                 print(f"Retry page {page_num}, token: {token}")
                 response.raise_for_status()
@@ -49,54 +55,125 @@ async def make_api_call(session, boolean_query, token, page_num):
             return None
 
 
-async def fetch_data(boolean_query: str):
+async def fetch_data(boolean_query: str, search_type: str, obtained_auth_token):
     all_responses = []
+    tokens_to_process = await initial_call(boolean_query, search_type, obtained_auth_token, all_responses)
+
+    sleep(15)  # Wait for the backend to register the new token
+
+    # Process remaining tokens one at a time sequentially
+    async with aiohttp.ClientSession() as session:
+        page_num = len(all_responses) + 1
+        
+        while tokens_to_process:
+            # Take one token at a time
+            current_token = tokens_to_process.pop(0)
+            
+            # Make a single API call
+            response = await make_api_call(session, boolean_query, current_token, page_num, 
+                                         search_type, obtained_auth_token)
+            
+            # Process the response
+            if response:
+                all_responses.append(response)
+                next_token = response["data"]["next_page_token"]
+                if next_token:
+                    tokens_to_process.append(next_token)
+                    
+            page_num += 1
+
+    return all_responses
+
+async def initial_call(boolean_query, search_type, obtained_auth_token, all_responses):
     tokens_to_process = []
 
     # First call - must be done separately
     async with aiohttp.ClientSession() as session:
-        first_response = await make_api_call(session, boolean_query, "", 1)
+        first_response = await make_api_call(session, boolean_query, "", 1, search_type, obtained_auth_token)
         if first_response:
             all_responses.append(first_response)
             next_token = first_response["data"]["next_page_token"]
             if next_token:
                 tokens_to_process.append(next_token)
+    return tokens_to_process
 
-    # Process remaining tokens in batches of 10
-    while tokens_to_process:
-        async with aiohttp.ClientSession() as session:
-            # Take up to 10 tokens at a time
-            current_batch = tokens_to_process[:10]
-            tokens_to_process = tokens_to_process[10:]
 
-            # Create tasks for concurrent execution
-            tasks = []
-            for i, token in enumerate(current_batch, len(all_responses) + 1):
-                task = make_api_call(session, boolean_query, token, i)
-                tasks.append(task)
+async def login_and_get_token(username, password): # Removed 'session' parameter
+    """
+    Logs in to the API and retrieves an authentication token.
+    Manages its own aiohttp.ClientSession.
+    """
+    request_body_payload = {
+        "email": username,
+        "password": password
+    }
+    full_request_body = {
+        "message": "string",
+        "request_info": {},
+        "request_body": request_body_payload
+    }
 
-            # Wait for all tasks in the batch to complete
-            batch_responses = await asyncio.gather(*tasks)
-
-            # Process responses and collect new tokens
-            for response in batch_responses:
-                if response:
-                    all_responses.append(response)
-                    next_token = response["data"]["next_page_token"]
-                    if next_token:
-                        tokens_to_process.append(next_token)
-
-    return all_responses
-
+    # Create a new session specifically for this login attempt
+    async with aiohttp.ClientSession() as session: # Session is created and managed here
+        try:
+            async with session.post(LOGIN_URL, json=full_request_body) as response:
+                response.raise_for_status()
+                login_data = await response.json()
+                
+                auth_token = login_data.get("data", {}).get("idToken")
+                
+                if not auth_token:
+                    print("Error: idToken not found in login response.")
+                    print(f"Login response data: {login_data}")
+                    return None
+                return auth_token
+        except aiohttp.ClientResponseError as e:
+            print(f"Login HTTP error: {e.status} {e.message}")
+            try:
+                error_content = await e.text()
+                print(f"Login error response body: {error_content}")
+            except Exception:
+                pass
+            return None
+        except Exception as e:
+            print(f"Login failed due to an unexpected error: {str(e)}")
+            return None
 
 async def main():
+    api_email = "u_je_u2008@live.com"
+    api_password = "12351235"
+
+    print("Logging in to get auth token...")
+    obtained_auth_token = await login_and_get_token(api_email, api_password)
+
+    if not obtained_auth_token:
+        print("Login failed or token not retrieved. Exiting application.")
+        return # Exit if login is unsuccessful
+
+    # wait for backend to register new token before using it
+    print("Waiting for backend to register new token...")
+    sleep(2)    
+
     print("Starting data collection...")
-    boolean="supermarket OR asian_grocery_store OR convenience_store OR food_store OR grocery_store OR market"
-    responses = await fetch_data(boolean)
+    # boolean ="""Museum"""
+    # tryp ="category_search"
+    # boolean = "@auto parts@ "
+    # type = "keyword_search"
+    # boolean ="""(auto_parts_store OR @auto parts@ OR @car repair@ OR @car parts@ OR @car repair parts@ OR @قطع غيار السيارات@) AND NOT @بنشر@"""
+    # type = "category_search + keyword_search"
+    
+    # boolean ="""@متحف@ OR @Museum@"""
+    # responses = await fetch_data(boolean, "keyword_search", obtained_auth_token)
+
+    # boolean ="""university"""
+    # responses = await fetch_data(boolean, "category_search", obtained_auth_token)
+
+    boolean ="""plumber"""
+    responses = await fetch_data(boolean, "category_search", obtained_auth_token)
 
     # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    boolean=boolean.replace(" ","")
+    boolean= boolean.replace(" ","")
     filename = f"saudi_{boolean}_{timestamp}.json"
     save_path = r"G:\My Drive\Personal\Work\offline\Jupyter\Git\zyte_scraper\cron_jobs\aquire_data\saudi_ggl_categories_full_data"
     full_path = os.path.join(save_path, filename)

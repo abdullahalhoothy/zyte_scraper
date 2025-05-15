@@ -1,31 +1,108 @@
 import os
 import csv
 import json
-from pprint import pprint
 import requests
 from datetime import datetime
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def swap_coordinates(nested_coords):
+    def recursive_swap(coords):
+        if isinstance(coords[0], (float, int)) and isinstance(coords[1], (float, int)):
+            return [coords[1], coords[0]]  # Swap [lat, lon] -> [lon, lat]
+        return [recursive_swap(inner) for inner in coords]
+
+    return recursive_swap(nested_coords)
+
+def convert_columnar_to_geojson(data, coordinates_list):
+    area_names = data["Area Name"]
+    num_rows = len(area_names)
+
+    # Resulting feature collection
+    geojson = {
+        "type": "FeatureCollection",
+        "features": []
+    }
+
+    # Iterate row-wise
+    for i in range(num_rows):
+        properties = {}
+        for key, value_list in data.items():
+            val = value_list[i] if i < len(value_list) else None
+            # Convert "" to None or 0 as appropriate
+            if val == "":
+                val = 0
+            # Try to convert numeric strings
+            if isinstance(val, str):
+                try:
+                    if "%" in val:
+                        val = val  # Keep as percentage string
+                    else:
+                        val = float(val)
+                except:
+                    pass
+
+            properties[key] = val
+
+        # Add required fields (customize as needed)
+        feature = {
+            "type": "Feature",
+            "properties": {
+                "id": properties["id"],  # unique ID
+                "name": properties["name"],
+                "type": properties["type"],
+                "Area Name": properties["Area Name"],
+                **properties
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": coordinates_list[i]
+            }
+        }
+        geojson["features"].append(feature)
+
+    return geojson
+
+
 # Prepare final output dictionary
-outputData = []
+outputJson = {
+    "Area Name": [],
+    "Total Population": [],
+    "Total Males": [],
+    "Total Females": [],
+    "Total Saudis": [],
+    "Total Non-saudis": [],
+    "Saudis population (%)": [],
+    "Male population (%)": [],
+    "Female population (%)": [],
+
+    # New Income Keys
+    "Overall Average Income": [],
+    "Average Male Income": [],
+    "Average Female Income": [],
+    "Average Saudi Income": [],
+    "Average Non-Saudi Income": [],
+    "Average Saudi Male Income": [],
+    "Average Saudi Female Income": [],
+    "Average Non-Saudi Male Income": [],
+    "Average Non-Saudi Female Income": [],
+}
+
+area_list = ['emirate-1', 'city-3']
+area_ids = []
+coordinates = []
+name = []
+area_type = []
 
 
-total_male_income = 0
-total_saudi_income = 0
-total_female_income = 0
-total_non_saudi_female = 0
-total_non_saudi_income = 0
-total_saudi_male_income = 0
-total_non_saudi_male_income = 0
-total_saudi_female_income = 0
+
 try:
     url = "https://api.map.910ths.sa/api/graphql/"
     headers = {
         'Content-Type': 'application/json'
     }
-    query1 = """
+    query = """
     query getIncomeQuery($areas: [String]!) {
-      all: averageIncome(filters: {male: true, saudi: true, parentAreas: $areas}, orders: {id: "value", direction: "desc"}) {
+      all: averageIncome(filters: {male: null, saudi: null, parentAreas: $areas}, orders: {id: "value", direction: "desc"}) {
         facts {
           area {
             id
@@ -108,20 +185,20 @@ try:
       }
     }
     """
-  
-    # First region: Central
-    payload_central = json.dumps({
+
+    payload = json.dumps({
         "operationName": "getIncomeQuery",
         "variables": {
-            "areas": ["city-3"]
+            "areas": area_list
         },
-        "query": query1
+        "query": query
     })
-    response = requests.post(url, headers=headers, data=payload_central, verify=False)
+    
+    response = requests.post(url, headers=headers, data=payload)
     areas = response.json()["data"]["all"]["facts"]
+    overall_income =  response.json()["data"]["all"]["facts"]
     males_income = response.json()["data"]["male"]["facts"]
     females_income = response.json()["data"]["female"]["facts"]
-
     saudi_income = response.json()["data"]["saudi"]["facts"]
     nonSaudi_income = response.json()["data"]["nonSaudi"]["facts"]
     saudiMale_income = response.json()["data"]["saudiMale"]["facts"]
@@ -129,94 +206,89 @@ try:
     nonSaudiMale_income = response.json()["data"]["nonSaudiMale"]["facts"]
     nonSaudiFemale_income = response.json()["data"]["nonSaudiFemale"]["facts"]
 
-    # Second region: Eastern
-    payload_eastern = json.dumps({
-        "operationName": "getIncomeQuery",
-        "variables": {
-            "areas": ["emirate-1"]
-        },
-        "query": query1
-    })
-    response = requests.post(url, headers=headers, data=payload_eastern ,verify=False)
-    areas += response.json()["data"]["all"]["facts"]
-    males_income += response.json()["data"]["male"]["facts"]
-    females_income += response.json()["data"]["female"]["facts"]
-
-    saudi_income += response.json()["data"]["saudi"]["facts"]
-    nonSaudi_income += response.json()["data"]["nonSaudi"]["facts"]
-    saudiMale_income += response.json()["data"]["saudiMale"]["facts"]
-    saudiFemale_income += response.json()["data"]["saudiFemale"]["facts"]
-    nonSaudiMale_income += response.json()["data"]["nonSaudiMale"]["facts"]
-    nonSaudiFemale_income += response.json()["data"]["nonSaudiFemale"]["facts"]
-
     print("Total Areas: {}".format(len(areas)))
 
     # Fetch demographic data per area
     for idx, data in enumerate(areas):
-        
-        outputJson = {
-            "type": "FeatureCollection",
-            "features": [
-          {
-          "type": "Feature",
-          "properties": {
-          "id": "73890e3c-ec19-489f-8ad8-59b52b9e5b7f",
-          "name": "صلاح الدين",
-          "type": "district",
+        all_average_income = 0
+        average_male_income = 0
+        average_female_income = 0
+        average_saudi_income = 0
+        average_non_saudi_income = 0
+        average_saudi_male_income = 0
+        average_saudi_female_income = 0
+        average_non_saudi_male_income = 0
+        average_non_saudi_female_income = 0
 
-            "Area Name": "",
-            "Total Population": "",
-            "Total Males": "",
-            "Total Females": "",
-            "Total Saudis": "",
-            "Total Non-saudis": "",
-            "Saudis population (%)": "",
-            "Male population (%)": "",
-            "Female population (%)": "",
-
-            # New Income Keys
-            "Overall Average Income": "",
-            "Average Male Income": "",
-            "Average Female Income": "",
-            "Average Saudi Income": "",
-            "Average Non-Saudi Income": "",
-            "Average Saudi Male Income": "",
-            "Average Saudi Female Income": "",
-            "Average Non-Saudi Male Income": "",
-            "Average Non-Saudi Female Income": "",
-            },
-            "geometry": { 
-              "type": "Polygon",
-              "coordinates":[] 
-        }
-                     
-            }],
-        }
         area_id = data["area"]["id"]
         area_name = data["area"]["name"]
         total_income = data["value"]
-        for idx, income in enumerate(response.json()["data"]):
-            if len(males_income) >= idx and males_income[idx]["area"].get("id") == area_id:
-                 total_male_income = males_income[idx].get("value", 0)
-            if len(females_income) >= idx and females_income[idx]["area"].get("id") == area_id:
-                 total_female_income = females_income[idx].get("value", 0)
-            if len(saudi_income) >= idx and saudi_income[idx]["area"].get("id") == area_id:
-                  total_saudi_income = saudi_income[idx].get("value", 0)
 
-            if len(nonSaudi_income) >= idx and nonSaudi_income[idx]["area"].get("id") == area_id:
-                total_non_saudi_income = nonSaudi_income[idx].get("value", 0)
+        ## geting area codinates
 
-        if len(saudiMale_income) >= idx and saudiMale_income[idx]["area"].get("id") == area_id:
-           total_saudi_male_income = saudiMale_income[idx].get("value", 0)
-        if len(saudiFemale_income) >= idx and saudiFemale_income[idx]["area"].get("id") == area_id:
-           total_saudi_female_income = saudiFemale_income[idx].get("value", 0)
-        if len(nonSaudiMale_income) >= idx and nonSaudiMale_income[idx]["area"].get("id") == area_id:
-           total_non_saudi_male_income = nonSaudiMale_income[idx].get("value", 0)
-        if len(nonSaudiFemale_income) >= idx and nonSaudiFemale_income[idx]["area"].get("id") == area_id:
-           total_non_saudi_female = nonSaudiFemale_income[idx].get("value", 0)
+        query2 = """
+          query getAreaShape($areaId: String!, $epsilon: Float!) {
+            area(id: $areaId) {
+              id
+              name(language: "ar")
+              type
+              simplifiedShape(epsilon: $epsilon)
+            }
+          }
+          """
+
+        payload_data = json.dumps({
+              "operationName": "getAreaShape",
+              "variables": {
+                  "areaId": area_id,
+                  "epsilon": 0.0000025
+              },
+              "query": query2
+          })
+
+        response_data = requests.post(url, headers=headers, data=payload_data)
+        json_data = response_data.json()['data']
+        coordinates.extend(json_data['area'].get("simplifiedShape", []))
+        name.append(json_data['area'].get("name", " "))
+        area_type.append(json_data['area'].get("type", " "))
+        area_ids.append(area_id)
+
+
+        for all_avg_income in overall_income:
+            if area_name == all_avg_income.get("area", []).get('name'):
+                all_average_income = all_avg_income.get('value', 0)
+
+        for avg_male_income in males_income:
+            if area_name == avg_male_income.get("area", []).get('name'):
+                average_male_income = avg_male_income.get('value', 0)
+        for avg_female_income in females_income:
+            if area_name == avg_female_income.get("area", []).get('name'):
+                average_female_income = avg_female_income.get('value', 0)
+
+        for avg_saudi_income in saudi_income:
+            if area_name == avg_saudi_income.get("area", []).get('name'):
+                average_saudi_income = avg_saudi_income.get('value', 0)
+        for avg_nonSaudi_income in nonSaudi_income:
+            if area_name == avg_nonSaudi_income.get("area", []).get('name'):
+                average_non_saudi_income  = avg_nonSaudi_income.get('value', 0)
+
+
+        for avg_saudi_male_income in saudiMale_income:
+            if area_name == avg_saudi_male_income.get("area", []).get('name'):
+                average_saudi_male_income  = avg_saudi_male_income.get('value', 0)
+        for avg_saudi_female_income in saudiFemale_income:
+            if area_name == avg_saudi_female_income.get("area", []).get('name'):
+                average_saudi_female_income  = avg_saudi_female_income.get('value', 0)
+
+        for avg_nonSaudiMale_income in nonSaudiMale_income:
+            if area_name == avg_nonSaudiMale_income.get("area", []).get('name'):
+                average_non_saudi_male_income = avg_nonSaudiMale_income.get('value', 0)
+        for avg_nonSaudiFemale_income in nonSaudiFemale_income:
+            if area_name == avg_nonSaudiFemale_income.get("area", []).get('name'):
+                average_non_saudi_female_income  = avg_nonSaudiFemale_income.get('value', 0)
 
         print(f"Processing Area: {area_name}")
-        outputJson['features'][0]["properties"]["Area Name"]=area_name
+        outputJson["Area Name"].append(area_name)
 
         payload_demo = json.dumps({
             "operationName": "getDemographicData",
@@ -271,7 +343,7 @@ try:
             """
         })
 
-        demo_response = requests.post(url, headers=headers, data=payload_demo,verify=False)
+        demo_response = requests.post(url, headers=headers, data=payload_demo)
         demo_data = demo_response.json().get("data", {})
 
 
@@ -288,107 +360,77 @@ try:
         saudis = extract_value("saudiPopulation")
         non_saudis = extract_value("nonSaudiPopulation")
 
-        if total > 0:
-            average_income = round((total_income / total), 2)
-            average_saudi_male_income = round((total_saudi_male_income / total), 2)
-            average_saudi_female_income = round((total_saudi_female_income / total), 2)
-            average_non_saudi_male_income = round((total_non_saudi_male_income / total), 2)
-            average_non_saudi_female_income = round((total_non_saudi_female / total), 2)
+        outputJson["Total Population"].append(total)
+        outputJson["Total Males"].append(males)
+        outputJson["Total Females"].append(females)
+        outputJson["Total Saudis"].append(saudis)
+        outputJson["Total Non-saudis"].append(non_saudis)
+        outputJson["Male population (%)"].append(f"{round((males / total) * 100, 2) if total else 0}%")
+        outputJson["Female population (%)"].append(f"{round((females / total) * 100, 2) if total else 0}%")
+        outputJson["Saudis population (%)"].append(f"{round((saudis / total) * 100, 2) if total else 0}%")
+        outputJson["Overall Average Income"].append(all_average_income)
+        outputJson["Average Male Income"].append(average_male_income)
+        outputJson["Average Female Income"].append(average_female_income)
 
-        else:
-            average_income = 0
-            average_saudi_male_income = 0
-            average_saudi_female_income = 0
-            average_non_saudi_male_income = 0
-            average_non_saudi_female_income = 0
-
-        if males > 0:
-            average_male_income = round((total_male_income / males), 2)
-        else:
-            average_male_income = 0
-
-        if females > 0:
-            average_female_income = round((total_female_income / females), 2)
-        else:
-            average_female_income = 0
-
-        if saudis > 0:
-           average_saudi_income = round((total_saudi_income / saudis), 2)
-        else:
-            average_saudi_income = 0
-
-        if non_saudis > 0:
-           average_non_saudi_income = round((total_non_saudi_income / non_saudis), 2)
-        else:
-            average_non_saudi_income = 0
-
- 
-        outputJson['features'][0]["properties"]["Total Population"]=total
-        outputJson['features'][0]["properties"]["Total Males"]=males
-        outputJson['features'][0]["properties"]["Total Females"]=females
-        outputJson['features'][0]["properties"]["Total Saudis"]=saudis
-        outputJson['features'][0]["properties"]["Total Non-saudis"]=non_saudis
-        outputJson['features'][0]["properties"]["Male population (%)"]=f"{round((males / total) * 100, 2) if total else 0}%"
-        outputJson['features'][0]["properties"]["Female population (%)"]=f"{round((females / total) * 100, 2) if total else 0}%"
-        outputJson['features'][0]["properties"]["Saudis population (%)"]=f"{round((saudis / total) * 100, 2) if total else 0}%"
-        outputJson['features'][0]["properties"]["Overall Average Income"]=average_income
-        outputJson['features'][0]["properties"]["Average Male Income"]=average_male_income
-        outputJson['features'][0]["properties"]["Average Female Income"]=average_female_income
-
-        outputJson['features'][0]["properties"]["Average Saudi Income"]=average_saudi_income
-        outputJson['features'][0]["properties"]["Average Non-Saudi Income"]=average_non_saudi_income
-        outputJson['features'][0]["properties"]["Average Saudi Male Income"]=average_saudi_male_income
-        outputJson['features'][0]["properties"]["Average Saudi Female Income"]=average_saudi_female_income
-        outputJson['features'][0]["properties"]["Average Non-Saudi Male Income"]=average_non_saudi_male_income
-        outputJson['features'][0]["properties"]["Average Non-Saudi Female Income"]=average_non_saudi_female_income
+        outputJson["Average Saudi Income"].append(average_saudi_income)
+        outputJson["Average Non-Saudi Income"].append(average_non_saudi_income)
+        outputJson["Average Saudi Male Income"].append(average_saudi_male_income)
+        outputJson["Average Saudi Female Income"].append(average_saudi_female_income)
+        outputJson["Average Non-Saudi Male Income"].append(average_non_saudi_male_income)
+        outputJson["Average Non-Saudi Female Income"].append(average_non_saudi_female_income)
 
         for byGender in demo_data['byGenderAndAgeGroupPopulation']['facts']:
-            
-            outputJson['features'][0]["properties"][byGender["splits"][0]['id'] + "_" + byGender["splits"][1]['id']]=byGender["value"]
-     
+            if (byGender["splits"][0]['id'] + "_" + byGender["splits"][1]['id'] in outputJson.keys()):
+                outputJson[byGender["splits"][0]['id'] + "_" + byGender["splits"][1]['id']].append(byGender["value"])
+            else:
+                outputJson[byGender["splits"][0]['id'] + "_" + byGender["splits"][1]['id']] = []
+                outputJson[byGender["splits"][0]['id'] + "_" + byGender["splits"][1]['id']].append(byGender["value"])
 
         for byNation in demo_data['byNationalityAndAgeGroupPopulation']['facts']:
-            
-             outputJson['features'][0]["properties"][byNation["splits"][0]['id'] + "_" + byNation["splits"][1]['id']]=byNation["value"]
+            if (byNation["splits"][0]['id'] + "_" + byNation["splits"][1]['id'] in outputJson.keys()):
+                outputJson[byNation["splits"][0]['id'] + "_" + byNation["splits"][1]['id']].append(byNation["value"])
+            else:
+                outputJson[byNation["splits"][0]['id'] + "_" + byNation["splits"][1]['id']] = []
+                outputJson[byNation["splits"][0]['id'] + "_" + byNation["splits"][1]['id']].append(byNation["value"])
 
-        # Get Area Shape
-        payload = json.dumps({
-          "operationName": "getAreaShape",
-          "variables": {
-            "areaId": area_id,
-            "epsilon": 0.00001
-          },
-          "query": "query getAreaShape($areaId: String!, $epsilon: Float!) {\n  area(id: $areaId) {\n    id\n    name(language: \"ar\")\n    type\n    simplifiedShape(epsilon: $epsilon)\n  }\n}\n"
-        })
-        headers = {
-          'Content-Type': 'application/json'
-        }
-
-        response = requests.request("POST", url, headers=headers, data=payload,verify=False)
-        simplified_Shape = response.json()['data']['area']['simplifiedShape'][0]
-        outputJson["features"][0]['geometry']['coordinates']=simplified_Shape
-
-        coords =  outputJson["features"][0]['geometry']['coordinates']
-          
-        new_coords = []
-        for ring in coords:
-            new_ring = [[lat, lon] for lon, lat in ring]
-            new_coords.append(new_ring)
-        outputJson["features"][0]['geometry']['coordinates'] = new_coords
-
-        outputData.append(outputJson)
-        
 except (Exception, ValueError) as e:
     print("Error", e)
 
 finally:
-   
-    if outputData:
-        os.makedirs("output_json_files", exist_ok=True)
+    if outputJson:
+        os.makedirs("output_csv_files", exist_ok=True)
+        os.makedirs("output_geo_json_files", exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename_json = f"output_json_files/Output_data_{timestamp}.json"
+        filename_csv = f"output_csv_files/demographic_data_{timestamp}.csv"
+        filename_json = f"output_geo_json_files/Output_data_{timestamp}.json"
+
+        # Dynamically collect all keys (including dynamically added ones)
+        all_keys = list(outputJson.keys())
+
+        # Ensure all value lists have the same length
+        max_len = max(len(v) for v in outputJson.values())
+        for key in all_keys:
+            while len(outputJson[key]) < max_len:
+                outputJson[key].append('')  # Fill missing data with empty strings
+
+        # Write to CSV
+        with open(filename_csv, "w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([key.capitalize().replace("_", " ") for key in all_keys])
+            rows = zip(*[outputJson[key] for key in all_keys])
+            writer.writerows(rows)
+        print(f"\n📁 Saved collected Data to: {filename_csv}")
+
+        outputJson['id'] = area_ids
+        outputJson['name'] = name
+        outputJson['type'] = area_type
+        swapped_coords = swap_coordinates(coordinates)
+        geo_Json_data = convert_columnar_to_geojson(outputJson, swapped_coords)
+
         with open(filename_json, "w", encoding="utf-8") as f:
-            json.dump(outputData, f, ensure_ascii=False, indent=4)
-        print(f"\n📁 Saved collected Data to json file: {filename_json}")
+            json.dump(geo_Json_data, f, ensure_ascii=False, indent=4)
+        print(f"\n📁 Saved collected Data to Geo-json file: {filename_json}")
+
+
 
