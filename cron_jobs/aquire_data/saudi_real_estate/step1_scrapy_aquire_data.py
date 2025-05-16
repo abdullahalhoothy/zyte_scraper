@@ -7,9 +7,11 @@ from scrapy import Spider, Request
 load_dotenv()
 
 BASE_URL = 'https://sa.aqar.fm'
-ZYTE_API_KEY = os.getenv("ZYTE_API_KEY")
-if not ZYTE_API_KEY:
-    raise ValueError("ZYTE_API_KEY is not set in the environment variables")
+
+
+with open('cron_jobs/secret_saudi_real_estate.json') as f:
+    config_data = json.load(f)
+ZYTE_API_KEY = config_data.get("ZYTE_API_KEY")
 
 os.makedirs(os.path.join(os.path.dirname(__file__), 'ignore'), exist_ok=True)
 

@@ -119,26 +119,26 @@ def convert_to_geojson(input_file_path):
    
     if not all_features:
         raise KeyError("No GeoJSON features found in the input file")
-       
+ 
     # Create a proper GeoJSON structure
     geojson = {
         "type": "FeatureCollection",
         "features": all_features
     }
-    
-    # Drop duplicate features based on "id" (keeping the last occurrence)
+        
+    # Drop duplicate features based on "id" in properties (keeping the last occurrence)
     unique_features = {}
     for feature in geojson["features"]:
-        if "id" in feature:
-            unique_features[feature["id"]] = feature
+        if "properties" in feature and "id" in feature["properties"]:
+            unique_features[feature["properties"]["id"]] = feature
         else:
-            # If feature doesn't have an id, keep it
+            # If feature doesn't have properties or id, keep it
             # We use a generated key to ensure it's kept
             unique_features[f"no_id_{id(feature)}"] = feature
-    
+        
     # Replace features with deduplicated list
     geojson["features"] = list(unique_features.values())
-   
+    
     # Save the GeoJSON file
     with open(geojson_path, 'w', encoding='utf-8') as f:
         json.dump(geojson, f, ensure_ascii=False, indent=2)
@@ -149,7 +149,7 @@ def convert_to_geojson(input_file_path):
     return str(geojson_path), csv_output_path
 
 if __name__ == "__main__":
-    geojson_path, csv_path = convert_to_geojson(r"cron_jobs\aquire_data\saudi_ggl_categories_full_data\saudi_(auto_parts_storeOR@autoparts@OR@carrepair@OR@carparts@OR@carrepairparts@OR@قطعغيارالسيارات@)ANDNOT@بنشر@_20250511_003837.json")
+    geojson_path, csv_path = convert_to_geojson(r"cron_jobs\aquire_data\saudi_ggl_categories_full_data\saudi_plumber_20250514_231515.json")
     print(f"Converted GeoJSON file saved to: {geojson_path}")
     print(f"Converted CSV file saved to: {csv_path}")
 

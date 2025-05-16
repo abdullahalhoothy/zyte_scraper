@@ -32,6 +32,7 @@ storage/postgres/sql_logs/**
 /cron_jobs/aquire_data/saudi_ggl_categories_full_data/**/*.csv
 /cron_jobs/aquire_data/saudi_income_data/**/*.csv
 /cron_jobs/aquire_data/saudi_income_data/**/*.json
+/cron_jobs/aquire_data/saudi_income_data/**/*.joblib
 
 # profiling files
 chrome-profiler-events.json

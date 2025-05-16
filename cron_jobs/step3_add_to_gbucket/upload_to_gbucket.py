@@ -5,8 +5,6 @@ from typing import List, Union, Dict
 import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from common_methods import GCPBucketManager
-from cron_jobs.aquire_data.saudi_real_estate.load_config import load_config
-import glob
 
 
 def upload_directory_to_gcp(
@@ -99,6 +97,7 @@ def upload_directory_to_gcp(
                     
                         # Upload file based on its extension
                         try:
+                            print(f"uploading {local_file_path} to {gcp_path}")
                             if file.lower().endswith('.csv'):
                                 gcp_manager.upload_file_directly(local_file_path, gcp_path, "text/csv")
                             elif file.lower().endswith('.json'):
@@ -116,31 +115,44 @@ def upload_directory_to_gcp(
         return False
 
 
-config = load_config()
-# Initialize GCP manager once
-gcp_manager = GCPBucketManager(
-    bucket_name="s-locator",
-    credentials_path="cron_jobs/ggl_bucket_sa.json",
-)
-gcp_manager_dev = GCPBucketManager(
+def upload_dev_gcp(directories):
+    gcp_manager_dev = GCPBucketManager(
     bucket_name="dev-s-locator",
     credentials_path="cron_jobs/ggl_bucket_sa.json",
-)
-directories = [
-    # "generate_economic_slocator_data",
-    # "generate_housing_slocator_data",
-    # "generate_household_slocator_data",
-    # "saudi_real_estate",
-    # "canada_census",
-    # "canada_commercial_properties",
-    # "saudi_census",
-    # "saudi_ggl_categories_full_data"
-    {"saudi_census": [
-        "population",
-          "housing", 
-          "household"
-          ]},
-    ]
+    )
+    dev_upload_sccuess = upload_directory_to_gcp(directories , gcp_manager_dev)
 
-dev_upload_sccuess = upload_directory_to_gcp(directories , gcp_manager_dev)
-upload_success = upload_directory_to_gcp(directories, gcp_manager)
+    return dev_upload_sccuess
+
+def upload_prod_gcp(directories):
+    gcp_manager_prod = GCPBucketManager(
+        bucket_name="s-locator",
+        credentials_path="cron_jobs/ggl_bucket_sa.json",
+    )
+    prod_upload_sccuess = upload_directory_to_gcp(directories , gcp_manager_prod)
+
+    return prod_upload_sccuess
+
+
+
+# directories = [
+#     # "generate_economic_slocator_data",
+#     # "generate_housing_slocator_data",
+#     # "generate_household_slocator_data",
+#     # "saudi_real_estate",
+#     # "canada_census",
+#     # "canada_commercial_properties",
+#     # "saudi_census",
+#     # "saudi_ggl_categories_full_data"
+#     {"saudi_census": [
+#         "population",
+#           "housing", 
+#           "household"
+#           ]},
+#     ]
+
+
+# upload_success = upload_dev_gcp(directories)
+# print(upload_success)
+# upload_success = upload_prod_gcp(directories)
+# print(upload_success)

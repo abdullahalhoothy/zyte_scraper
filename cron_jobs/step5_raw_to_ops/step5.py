@@ -40,43 +40,40 @@ def apply_transformation(db_conn, transform_name):
 
 
 def main():
-    try:
-        with open("cron_jobs/secrets_database.json", "r") as f:
-            config = json.load(f)
+    with open("cron_jobs/secrets_database.json", "r") as f:
+        config = json.load(f)
 
-        transfos = {
-            "s-locator": ["dbo_operational@marketplace_slocator"],
-            "dev-s-locator": ["dbo_operational@marketplace_slocator"],
-            # "vivi_app": [
-            #     "dbo-coffee@marketplace_products",
-            #     # Add other transformations here as needed
-            # ],
-        }
+    transfos = {
+        # "s-locator": ["dbo_operational@marketplace_slocator"],
+        "dev-s-locator": ["dbo_operational@marketplace_slocator"],
+        # "vivi_app": [
+        #     "dbo-coffee@marketplace_products",
+        #     # Add other transformations here as needed
+        # ],
+    }
 
-        connections = {}
-        for server in transfos.keys():
-            conn_info = config[server]["db"]
+    connections = {}
+    for server in transfos.keys():
+        conn_info = config[server]["db"]
 
-            # List of transformations to apply
-            transformations_to_apply = transfos[server]
+        # List of transformations to apply
+        transformations_to_apply = transfos[server]
 
-            if transformations_to_apply:
-                # Apply each transformation
-                for transform in transformations_to_apply:
-                    db_name, transform_name = transform.split("@")
-                    conn_info["dbname"] = db_name
+        if transformations_to_apply:
+            # Apply each transformation
+            for transform in transformations_to_apply:
+                db_name, transform_name = transform.split("@")
+                conn_info["dbname"] = db_name
 
-                    if server + db_name not in connections:
-                        connections[server + db_name] = DatabaseConnection(conn_info)
+                if server + db_name not in connections:
+                    connections[server + db_name] = DatabaseConnection(conn_info)
 
-                    conn = connections[server + db_name]
+                conn = connections[server + db_name]
 
-                    print(f"\nApplying transformation: {transform}")
-                    apply_transformation(conn, transform_name)
+                print(f"\nApplying transformation: {transform}")
+                apply_transformation(conn, transform_name)
 
-    except Exception as e:
-        print(f"Fatal error: {e}")
-        sys.exit(1)
+
 
 
 if __name__ == "__main__":
