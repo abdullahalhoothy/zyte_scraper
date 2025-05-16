@@ -34,5 +34,21 @@ jobs:
           # Make the pipeline executable (if needed)
           chmod +x aqar_real_estate_pipeline.py
           
+          # Create virtual environment if it doesn't exist
+          if [ ! -d "venv" ]; then
+            echo "Creating virtual environment..."
+            python3 -m venv venv
+          fi
+          
+          # Activate virtual environment
+          source venv/bin/activate
+          
+          # Install or update dependencies
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          
           # Execute the Aqar real estate pipeline
-          python3 aqar_real_estate_pipeline.py
+          python aqar_real_estate_pipeline.py
+          
+          # Deactivate virtual environment
+          deactivate

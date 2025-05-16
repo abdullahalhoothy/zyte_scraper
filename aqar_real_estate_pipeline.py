@@ -40,6 +40,8 @@ def run_step(step_name, script_path):
     logging.info("-" * 50)
     
     try:
+        # Using current Python interpreter (which will be the virtual environment python)
+        # We don't need to specify the virtual environment path since we're already in it
         result = subprocess.run(
             [sys.executable, script_path],
             check=True,
@@ -61,6 +63,13 @@ def main():
     """Main Saudi real estate pipeline orchestration function."""
     log_file = setup_logging()
     logging.info(f"Starting Saudi Real Estate pipeline at {datetime.now()}")
+    logging.info(f"Using Python interpreter: {sys.executable}")
+    
+    # Verify we're running in the virtual environment
+    if 'VIRTUAL_ENV' in os.environ:
+        logging.info(f"Virtual environment: {os.environ['VIRTUAL_ENV']}")
+    else:
+        logging.warning("Not running in a virtual environment!")
     
     # Get the base directory
     base_dir = os.path.dirname(os.path.abspath(__file__))
