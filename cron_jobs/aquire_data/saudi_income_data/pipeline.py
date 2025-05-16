@@ -12,6 +12,7 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import mean_absolute_error, r2_score
 
 import os
+from glob import glob
 import logging
 import numpy as np
 import pandas as pd
@@ -21,12 +22,21 @@ from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.ensemble import (
     RandomForestRegressor,
     StackingRegressor,
-
 )
 from sklearn.linear_model import LinearRegression
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
 import joblib
+
+
+def read_files(city: str):
+    geojson_files_path = glob(f"cache/{city.lower()}/*.geojson")
+    geojson_files = []
+    for path in geojson_files_path:
+        if f"geojson_{city}.geojson" not in path:
+            f = gpd.read_file(path).set_crs(epsg=4326).to_crs(epsg=4326)
+            geojson_files.append(f)
+    return geojson_files
 
 
 def load_data(db_access_key, city):
@@ -47,6 +57,7 @@ def load_data(db_access_key, city):
 
     if os.path.isfile("cache/housing_data.csv"):
         housing_data = pd.read_csv("cache/housing_data.csv")
+
     else:
         engine = create_engine(db_access_key)
         housing_data = pd.read_sql(
@@ -61,6 +72,22 @@ def load_data(db_access_key, city):
     population_data = gpd.GeoDataFrame.from_features(
         pd.read_json("cache/all_features.json").features
     )
+
+    if "PCNT" in population_data.columns:
+        population_data = population_data.rename(
+            columns={
+                "MAIN_ID": "Main_ID",
+                "GID": "Grid_ID",
+                "GLEVEL": "Level",
+                "PCNT": "Population_Count",
+                "PM_CNT": "Male_Population",
+                "PF_CNT": "Female_Population",
+                "PDEN_KM2": "Population_Density_KM2",
+                "YMED_AGE": "Median_Age_Total",
+                "YMED_AGE_M": "Median_Age_Male",
+                "YMED_AGE_FM": "Median_Age_Female",
+            }
+        )
 
     restaurants_data = pd.read_csv(
         f"cache/restaurants_{city[-1].lower()}_full.csv"
@@ -82,36 +109,12 @@ def load_data(db_access_key, city):
         f"cache/{city[-1].lower()}_luxurious_areas.csv"
     ).rename(columns={"lat": "latitude", "lng": "longitude"})
 
-    dental_clinic = (
-        gpd.read_file("cache/geojson_saudi_dental_clinic_20250512_110022.geojson")
-        .set_crs(epsg=4326)
-        .to_crs(epsg=4326)
-    )
-    electrician = (
-        gpd.read_file("cache/geojson_saudi_electrician_20250512_122401.geojson")
-        .set_crs(epsg=4326)
-        .to_crs(epsg=4326)
-    )
-    plumber = (
-        gpd.read_file("cache/geojson_saudi_plumber_20250512_123014.geojson")
-        .set_crs(epsg=4326)
-        .to_crs(epsg=4326)
-    )
-    police = (
-        gpd.read_file("cache/geojson_saudi_police_20250512_103953.geojson")
-        .set_crs(epsg=4326)
-        .to_crs(epsg=4326)
-    )
-    embassy = (
-        gpd.read_file("cache/geojson_saudi_embassy_20250512_102151.geojson")
-        .set_crs(epsg=4326)
-        .to_crs(epsg=4326)
-    )
-    university = (
-        gpd.read_file("cache/geojson_saudi_university_20250512_011237.geojson")
-        .set_crs(epsg=4326)
-        .to_crs(epsg=4326)
-    )
+    additional_data = []
+    try:
+        additional_data = read_files(city[-1].lower())
+    except:
+        pass
+
 
     return (
         real_estate_data,
@@ -122,12 +125,7 @@ def load_data(db_access_key, city):
         luxury_hotels,
         gyms,
         luxurious_areas,
-        dental_clinic,
-        electrician,
-        plumber,
-        police,
-        embassy,
-        university,
+        additional_data,
     )
 
 
@@ -140,14 +138,9 @@ def get_geodataframes(
     luxury_hotels,
     gyms,
     luxurious_areas,
-    dental_clinic,
-    electrician,
-    plumber,
-    police,
-    embassy,
-    university,
-    city,
-    is_training=True
+    additional_data,
+    city=[""],
+    is_training=True,
 ):
     if is_training:
         grid_size = 0.01
@@ -157,10 +150,8 @@ def get_geodataframes(
     points = population_data.geometry.map(lambda x: x.centroid)
     population_data["longitude"] = points.map(lambda x: x.x)
     population_data["latitude"] = points.map(lambda x: x.y)
-    population_data = pd.DataFrame(population_data.drop("geometry", axis=1)).rename(
-        columns={"PCNT": "TotalPopulation", "GLEVEL": "zoom_level"}
-    )
 
+    population_data = pd.DataFrame(population_data.drop("geometry", axis=1))
     x = real_estate_data.category.str.split(
         "_for_"
     )  # villa_for_sale so "villa" is building type and "sale" is trade type
@@ -194,7 +185,19 @@ def get_geodataframes(
     )
 
     # Prepare census data with age calculation
-    population_data = population_data[["TotalPopulation", "longitude", "latitude"]]
+    population_data = population_data[
+        [
+            "Population_Count",
+            "Male_Population",
+            "Female_Population",
+            "Population_Density_KM2",
+            "Median_Age_Total",
+            "Median_Age_Male",
+            "Median_Age_Female",
+            "longitude",
+            "latitude",
+        ]
+    ]
     population_data = (
         gpd.GeoDataFrame(
             population_data,
@@ -291,12 +294,12 @@ def get_geodataframes(
     luxurious_areas = luxurious_areas.loc[luxurious_areas.within(city_boundaries)]
     gyms = gyms.loc[gyms.within(city_boundaries)]
     luxurious_areas = luxurious_areas.loc[luxurious_areas.within(city_boundaries)]
-    dental_clinic = dental_clinic.loc[dental_clinic.within(city_boundaries)]
-    electrician = electrician.loc[electrician.within(city_boundaries)]
-    plumber = plumber.loc[plumber.within(city_boundaries)]
-    police = police.loc[police.within(city_boundaries)]
-    embassy = embassy.loc[embassy.within(city_boundaries)]
-    university = university.loc[university.within(city_boundaries)]
+
+    for i in range(len(additional_data)):
+        additional_data[i] = additional_data[i].loc[
+            additional_data[i].within(city_boundaries)
+        ]
+
 
     return (
         real_estate_data,
@@ -307,15 +310,9 @@ def get_geodataframes(
         luxury_hotels,
         gyms,
         luxurious_areas,
-        dental_clinic,
-        electrician,
-        plumber,
-        police,
-        embassy,
-        university,
+        additional_data,
         grid_size,
     )
-
 
 def make_grids(
     real_estate_data,
@@ -326,12 +323,7 @@ def make_grids(
     luxury_hotels,
     gyms,
     luxurious_areas,
-    dental_clinic,
-    electrician,
-    plumber,
-    police,
-    embassy,
-    university,
+    additional_data,
     grid_size,
 ):
     # Create grid cells
@@ -364,20 +356,23 @@ def make_grids(
         luxurious_areas, grid, how="inner", predicate="within"
     )
 
-    joined_dental_clinic = gpd.sjoin(
-        dental_clinic, grid, how="inner", predicate="within"
-    )
-    joined_electrician = gpd.sjoin(electrician, grid, how="inner", predicate="within")
-    joined_plumber = gpd.sjoin(plumber, grid, how="inner", predicate="within")
-    joined_police = gpd.sjoin(police, grid, how="inner", predicate="within")
-    joined_embassy = gpd.sjoin(embassy, grid, how="inner", predicate="within")
-    joined_university = gpd.sjoin(university, grid, how="inner", predicate="within")
+    for i in range(len(additional_data)):
+        additional_data[i] = gpd.sjoin(
+            additional_data[i], grid, how="inner", predicate="within"
+        )
 
     # Aggregate data into the grid
     grid = pd.concat(
         [
             grid,
-            joined_population.groupby("index_right")["TotalPopulation"].sum(),
+            joined_population.groupby("index_right")["Population_Count"].sum(),
+            joined_population.groupby("index_right")["Male_Population"].sum(),
+            joined_population.groupby("index_right")["Female_Population"].sum(),
+            joined_population.groupby("index_right")["Population_Density_KM2"].mean(),
+            joined_population.groupby("index_right")["Median_Age_Total"].mean(),
+            joined_population.groupby("index_right")["Median_Age_Male"].mean(),
+            joined_population.groupby("index_right")["Median_Age_Female"].mean(),
+
             joined_real_estate.groupby("index_right")["selling_price"].mean(),
             joined_real_estate.groupby("index_right")["renting_price"].mean(),
             joined_real_estate.groupby("index_right")["is_villa"]
@@ -403,25 +398,12 @@ def make_grids(
             joined_luxurious_areas.groupby("index_right")["name"]
             .count()
             .rename("luxury_area_count"),
-            joined_dental_clinic.groupby("index_right")["name"]
-            .count()
-            .rename("joined_dental_clinic"),
-            joined_electrician.groupby("index_right")["name"]
-            .count()
-            .rename("joined_electrician"),
-            joined_plumber.groupby("index_right")["name"]
-            .count()
-            .rename("joined_plumber"),
-            joined_police.groupby("index_right")["name"]
-            .count()
-            .rename("joined_police"),
-            joined_embassy.groupby("index_right")["name"]
-            .count()
-            .rename("joined_embassy"),
-            joined_university.groupby("index_right")["name"]
-            .count()
-            .rename("joined_university"),
-        ],
+        ] + [
+                f.groupby("index_right")["name"]
+                .count()
+                .rename(f"dataset_index_{str(i)}")
+                for i, f in enumerate(additional_data)
+            ],
         axis=1,
     )
 
@@ -455,14 +437,14 @@ def get_dataset(
     data = get_geodataframes(*data, city)
 
     grid = make_grids(*data)
-    mask = ~grid["TotalPopulation"].isna()
+    mask = ~grid["Population_Count"].isna()
     grid = grid.loc[mask]
 
     income_data = gpd.GeoDataFrame.from_features(
-        pd.read_json("cache/ignore_zad_Output_data.json").features
+        pd.read_json("cache/Output_data_20250509_101734.json").features
     )
 
-    bounds = grid[["geometry", "TotalPopulation"]].dropna().union_all().convex_hull
+    bounds = grid[["geometry", "Population_Count"]].dropna().union_all().convex_hull
     mask = income_data[["geometry", "Average Male Income"]].within(bounds)
     income_data = income_data.loc[mask][["geometry", "Average Male Income"]]
 
@@ -473,7 +455,7 @@ def get_dataset(
     income_data = income_data[["geometry", "Average Male Income"]].assign(
         geometry=lambda x: x.geometry.centroid
     )
-    mask = ~grid[["geometry", "TotalPopulation"]].isna().any(axis=1)
+    mask = ~grid[["geometry", "Population_Count"]].isna().any(axis=1)
     grid = grid.loc[mask]
 
     xy_points = np.array([(point.x, point.y) for point in income_data.geometry])
@@ -629,7 +611,7 @@ def predict_income(income_data, models):
         predictions.append(pred.squeeze())
 
     y = np.mean(np.stack(predictions, axis=0), axis=0)
-    return y #np.expm1(y)
+    return y  # np.expm1(y)
 
 
 def get_predicted_income(
@@ -645,7 +627,7 @@ def get_predicted_income(
 
     data = get_geodataframes(*data_, city)
     grid = make_grids(*data)
-    mask = ~grid["TotalPopulation"].isna()
+    mask = ~grid["Population_Count"].isna()
     grid = grid.loc[mask]
 
     income_data = grid.set_crs(epsg=4326).to_crs(epsg=4326)
@@ -658,9 +640,13 @@ def get_predicted_income(
     y = predict_income(income_data, models)
     income_data["income"] = y
 
+    data_ = load_data(
+        db_access_key,
+        city,
+    )
     data = get_geodataframes(*data_, city, is_training=False)
     grid = make_grids(*data)
-    mask = ~grid["TotalPopulation"].isna()
+    mask = ~grid["Population_Count"].isna()
     grid = grid.loc[mask]
 
     income_data = (
@@ -721,3 +707,4 @@ def adapt(finner_data, coarser_grid):
     ).drop("index_right", axis=1)
 
     return merged
+
