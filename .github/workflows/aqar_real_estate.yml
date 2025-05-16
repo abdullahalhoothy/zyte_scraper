@@ -1,0 +1,38 @@
+name: Aqar Real Estate Pipeline
+
+on:
+  schedule:
+    # Run every 3 days at 1:00 AM UTC
+    - cron: '0 1 */3 * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual pipeline run'
+        required: false
+        default: 'Manual execution of Aqar real estate pipeline'
+
+jobs:
+  run_aqar_real_estate_pipeline:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code for reference
+      uses: actions/checkout@v3
+      
+    - name: Run Aqar real estate pipeline on VPS
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          # Navigate to the project directory
+          cd /zyte_scraper
+          
+          # Pull latest code including the Aqar real estate pipeline
+          git pull
+          
+          # Make the pipeline executable (if needed)
+          chmod +x aqar_real_estate_pipeline.py
+          
+          # Execute the Aqar real estate pipeline
+          python3 aqar_real_estate_pipeline.py
