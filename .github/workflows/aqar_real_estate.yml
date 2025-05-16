@@ -34,6 +34,13 @@ jobs:
           # Make the pipeline executable (if needed)
           chmod +x aqar_real_estate_pipeline.py
           
+          # Install required packages first
+          echo "Installing required packages..."
+          sudo apt-get update
+          # Determine Python version and install appropriate venv package
+          PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1-2)
+          sudo apt-get install -y python3-venv
+          
           # Create virtual environment if it doesn't exist
           if [ ! -d "venv" ]; then
             echo "Creating virtual environment..."
@@ -41,13 +48,20 @@ jobs:
           fi
           
           # Activate virtual environment
+          echo "Activating virtual environment..."
           source venv/bin/activate
           
+          # Verify we're in the virtual environment
+          which python
+          python --version
+          
           # Install or update dependencies
-          pip install --upgrade pip
+          echo "Installing dependencies..."
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           
           # Execute the Aqar real estate pipeline
+          echo "Running pipeline..."
           python aqar_real_estate_pipeline.py
           
           # Deactivate virtual environment
