@@ -2,10 +2,12 @@
 **/__pycache__
 **/secret*
 **/venv
+**/.venv
 pc_venv/
 **/.idea/
 **/.env
 **/secret*
+logs/
 **/population_json_files*
 husain_videos/**
 mykeys*

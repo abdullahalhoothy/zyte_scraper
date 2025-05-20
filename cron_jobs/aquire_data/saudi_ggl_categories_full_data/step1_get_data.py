@@ -144,7 +144,7 @@ async def process_query_and_save(query, search_type, obtained_auth_token):
     # Save results
     query_str = boolean_query.replace(" ", "_").replace("/", "_").replace("\\", "_")
     filename = f"saudi_{city_name}_{query_str}.json"
-    save_path = r"G:\My Drive\Personal\Work\offline\Jupyter\Git\zyte_scraper\cron_jobs\aquire_data\saudi_ggl_categories_full_data"
+    save_path = r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_ggl_categories_full_data"
     full_path = os.path.join(save_path, filename)
 
     os.makedirs(save_path, exist_ok=True)
