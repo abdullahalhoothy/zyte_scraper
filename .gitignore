@@ -30,6 +30,7 @@ storage/postgres/sql_logs/**
 **/*all_features.json
 **/*.csv
 **/*.geojson
+**/*.joblib
 /cron_jobs/aquire_data/saudi_ggl_categories_full_data/**/*.json
 /cron_jobs/aquire_data/saudi_ggl_categories_full_data/**/*.csv
 /cron_jobs/aquire_data/saudi_income_data/**/*.csv

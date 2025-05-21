@@ -1,10 +1,18 @@
+import sys
 import os
+# Get the directory of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Navigate up to the grandparent directory (cron_jobs)
+grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+# Add the grandparent directory to the system path
+sys.path.append(grandparent_dir)
+
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 from glob import glob
 from shapely.geometry import box
-from pipeline import idw_interpolation
+from cron_jobs.aquire_data.predict_saudi_income.pipeline import idw_interpolation
 from pathlib import Path
 
 def interpolate_income(population_dir_path, zad_income_file_path, output_dir_path):
@@ -97,6 +105,6 @@ def interpolate_income(population_dir_path, zad_income_file_path, output_dir_pat
 
 
 interpolate_income(r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_census\population\population_json_files",
-                   r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_income_data\output_geo_json_files\ignore_Output_data_20250509_101734.json",
-                   r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_income_data\interpolated_zad")
+                   r"F:\git\zyte_scraper\cron_jobs\aquire_data\zad_income_data\output_geo_json_files\Output_data_20250520_201024.geojson",
+                   r"F:\git\zyte_scraper\cron_jobs\aquire_data\zad_income_data\interpolated_zad")
 
