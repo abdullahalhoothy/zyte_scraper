@@ -16,7 +16,7 @@ from cron_jobs.aquire_data.predict_saudi_income.pipeline import idw_interpolatio
 from pathlib import Path
 
 def interpolate_income(population_dir_path, zad_income_file_path, output_dir_path):
-    population_data_files = glob(os.path.join(population_dir_path, "**", "*.json"), recursive=True)
+    population_data_files = glob(os.path.join(population_dir_path, "**", "*.geojson"), recursive=True)
     for population_file_path in population_data_files:
         input_path_parts = population_file_path.split(os.path.sep)
         # Build the output path
@@ -74,13 +74,16 @@ def interpolate_income(population_dir_path, zad_income_file_path, output_dir_pat
         grid = pd.concat(
             [
                 grid,
-                joined_population.groupby("index_right")["Population_Count"].sum(),
-                joined_population.groupby("index_right")["Male_Population"].sum(),
-                joined_population.groupby("index_right")["Female_Population"].sum(),
-                joined_population.groupby("index_right")["Population_Density_KM2"].mean(),
-                joined_population.groupby("index_right")["Median_Age_Total"].mean(),
-                joined_population.groupby("index_right")["Median_Age_Male"].mean(),
-                joined_population.groupby("index_right")["Median_Age_Female"].mean(),
+                joined_population.groupby("index_right")["Main_ID"].first().astype('Int64'),
+                joined_population.groupby("index_right")["Grid_ID"].first().astype('Int64'),
+                joined_population.groupby("index_right")["Level"].first().astype('Int64'),
+                joined_population.groupby("index_right")["Population_Count"].first().astype('Int64'),
+                joined_population.groupby("index_right")["Male_Population"].first().astype('Int64'),
+                joined_population.groupby("index_right")["Female_Population"].first().astype('Int64'),
+                joined_population.groupby("index_right")["Population_Density_KM2"].first(),
+                joined_population.groupby("index_right")["Median_Age_Total"].first(),
+                joined_population.groupby("index_right")["Median_Age_Male"].first(),
+                joined_population.groupby("index_right")["Median_Age_Female"].first(),
             ],
             axis=1
         )

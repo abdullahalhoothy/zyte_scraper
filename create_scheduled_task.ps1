@@ -5,17 +5,36 @@ $ErrorActionPreference = "Stop"
 
 # Task configuration
 $taskName = "Zyte Scraper Hourly Sync"
-$taskDescription = "Syncs zyte_scraper folder from F: to Google Drive every hour"
+$taskDescription = "Syncs zyte_scraper folder from F: to Google Drive every hour - Silent Mode"
 $scriptPath = "F:\git\zyte_scraper\sync_zyte_scraper.ps1"
+$vbsPath = "F:\git\zyte_scraper\run_sync_silent.vbs"
 
-Write-Host "Creating scheduled task: $taskName" -ForegroundColor Green
-Write-Host "Script location: $scriptPath" -ForegroundColor Yellow
+Write-Host "Creating silent scheduled task: $taskName" -ForegroundColor Green
+Write-Host "PowerShell script: $scriptPath" -ForegroundColor Yellow
+Write-Host "VBScript wrapper: $vbsPath" -ForegroundColor Yellow
 
 try {
     # Check if the sync script exists
     if (!(Test-Path $scriptPath)) {
         throw "Sync script not found at: $scriptPath"
     }
+
+    # Create the VBScript wrapper for silent execution
+    $vbsContent = @"
+' Silent PowerShell Script Runner for zyte_scraper sync
+' Runs the sync script without any visible windows
+
+Dim objShell
+Set objShell = CreateObject("WScript.Shell")
+
+' Run PowerShell script completely hidden
+objShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$scriptPath""", 0, False
+
+Set objShell = Nothing
+"@
+
+    Write-Host "Creating VBScript wrapper..." -ForegroundColor Green
+    Set-Content -Path $vbsPath -Value $vbsContent -Encoding ASCII
 
     # Check if task already exists and remove it
     $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -27,7 +46,7 @@ try {
     # Calculate start time (2 minutes from now)
     $startTime = (Get-Date).AddMinutes(2).ToString("yyyy-MM-ddTHH:mm:ss")
 
-    # Create the task XML with proper start time
+    # Create the task XML to run VBScript instead of PowerShell directly
     $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -47,7 +66,7 @@ try {
   <Principals>
     <Principal id="Author">
       <UserId>$env:USERNAME</UserId>
-      <LogonType>InteractiveToken</LogonType>
+      <LogonType>S4U</LogonType>
       <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
@@ -60,6 +79,7 @@ try {
     <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
     <AllowStartOnDemand>true</AllowStartOnDemand>
     <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
     <RestartOnFailure>
       <Interval>PT10M</Interval>
       <Count>3</Count>
@@ -67,8 +87,8 @@ try {
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>powershell.exe</Command>
-      <Arguments>-ExecutionPolicy Bypass -WindowStyle Hidden -File "$scriptPath"</Arguments>
+      <Command>wscript.exe</Command>
+      <Arguments>"$vbsPath"</Arguments>
       <WorkingDirectory>F:\git\zyte_scraper</WorkingDirectory>
     </Exec>
   </Actions>
@@ -81,9 +101,11 @@ try {
     Write-Host "`nScheduled task created successfully!" -ForegroundColor Green
     Write-Host "Task details:" -ForegroundColor Cyan
     Write-Host "  Name: $taskName"
+    Write-Host "  Mode: SILENT (no windows will appear)"
     Write-Host "  First run: $((Get-Date).AddMinutes(2).ToString('yyyy-MM-dd HH:mm:ss'))"
     Write-Host "  Frequency: Every 1 hour"
-    Write-Host "  Script: $scriptPath"
+    Write-Host "  PowerShell script: $scriptPath"
+    Write-Host "  VBScript wrapper: $vbsPath"
 
     # Show the task info
     Start-Sleep -Seconds 2  # Give it a moment to register
@@ -100,6 +122,10 @@ try {
     Write-Host "    Enable-ScheduledTask -TaskName '$taskName'"
     Write-Host "    Unregister-ScheduledTask -TaskName '$taskName'"
 
+    Write-Host "`nTo test silent execution:" -ForegroundColor Cyan
+    Write-Host "  Double-click: $vbsPath"
+    Write-Host "  (Should run with no visible windows)"
+
 } catch {
     Write-Host "`nError creating scheduled task:" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
@@ -107,4 +133,5 @@ try {
     exit 1
 }
 
-Write-Host "`nScheduled task setup complete!" -ForegroundColor Green
+Write-Host "`nSilent scheduled task setup complete!" -ForegroundColor Green
+Write-Host "The task will now run completely invisibly every hour." -ForegroundColor Green

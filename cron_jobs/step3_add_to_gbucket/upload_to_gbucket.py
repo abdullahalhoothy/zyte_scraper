@@ -86,7 +86,7 @@ def upload_directory_to_gcp(
                 # Process files in the current directory
                 for file in files:
                     # Only process CSV and JSON files
-                    if file.lower().endswith(('.csv', '.json')):
+                    if file.lower().endswith(('.csv', 'json')):
                         local_file_path = os.path.join(root, file)
                     
                         # Construct the destination path in GCP
@@ -100,7 +100,7 @@ def upload_directory_to_gcp(
                             print(f"uploading {local_file_path} to {gcp_path}")
                             if file.lower().endswith('.csv'):
                                 gcp_manager.upload_file_directly(local_file_path, gcp_path, "text/csv")
-                            elif file.lower().endswith('.json'):
+                            elif file.lower().endswith('json'):
                                 gcp_manager.upload_file_directly(local_file_path, gcp_path, "application/json")
                         
                             print(f"Uploaded {local_file_path} to {gcp_path}")

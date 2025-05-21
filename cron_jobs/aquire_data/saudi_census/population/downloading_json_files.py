@@ -20,7 +20,7 @@ def download_json_files_recursive(bucket_name: str, source_prefix: str, destinat
 
         for blob in blobs:
             # Only consider JSON files
-            if blob.name.endswith(".json"):
+            if blob.name.endswith("json"):
                 relative_path = os.path.relpath(blob.name, source_prefix)
                 destination_path = os.path.join(destination_folder, relative_path)
                 if os.path.exists(destination_path):

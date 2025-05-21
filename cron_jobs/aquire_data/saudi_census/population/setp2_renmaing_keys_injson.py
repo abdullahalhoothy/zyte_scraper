@@ -30,7 +30,7 @@ def process_json_files(folder_path):
     """Update keys in ALL JSON files (keep original filenames)."""
     for root, _, files in os.walk(folder_path):
         for file in files:
-            if file.lower().endswith('.json'):  # Process ALL JSON files
+            if file.lower().endswith('json'):  # Process ALL JSON files
                 file_path = os.path.join(root, file)
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
