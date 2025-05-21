@@ -50,3 +50,7 @@ urllib3==2.4.0
 xgboost
 catboost
 scikit-learn
+jupyter 
+ipykernel
+notebook 
+jupyterlab

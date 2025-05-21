@@ -17,10 +17,27 @@ from pathlib import Path
 
 def interpolate_income(population_dir_path, zad_income_file_path, output_dir_path):
     population_data_files = glob(os.path.join(population_dir_path, "**", "*.json"), recursive=True)
-    for population_data_file in population_data_files:
-        print(f"starting {population_data_file} ...")
+    for population_file_path in population_data_files:
+        input_path_parts = population_file_path.split(os.path.sep)
+        # Build the output path
+        output_file_path = Path(output_dir_path) / input_path_parts[-2] / input_path_parts[-1]
+        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+        # check if interpolated file already exists
+        if os.path.exists(output_file_path):
+            print(f"Skipping {population_file_path} as it already exists.")
+            continue
+
+        # skip v8
+        if "v8" in population_file_path:
+            print("skipping v8 because it's too big")
+            continue
+
+
+
+
+        print(f"starting {population_file_path} ...")
         population_data = gpd.GeoDataFrame.from_features(
-            pd.read_json(population_data_file).features
+            pd.read_json(population_file_path).features
         )
 
         if "PCNT" in population_data.columns:
@@ -97,10 +114,7 @@ def interpolate_income(population_dir_path, zad_income_file_path, output_dir_pat
         interpolated_values = idw_interpolation(xy_points, values, xy_targets, k=6, power=2) 
         grid["income"] = interpolated_values
         grid = grid.set_crs(epsg=4326).to_crs(epsg=4326)
-        input_path_parts = population_data_file.split(os.path.sep)
-        # Build the output path
-        output_file_path = Path(output_dir_path) / input_path_parts[-2] / input_path_parts[-1]
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+
         grid.to_file(output_file_path, driver="geojson")
 
 

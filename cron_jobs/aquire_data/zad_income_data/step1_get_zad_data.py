@@ -294,7 +294,7 @@ for idx, data in enumerate(areas):
         area_properties[key] = byNation["value"]
 
     # Create GeoJSON feature directly
-    if swapped_coordinates:  # Only create feature if we have coordinates
+    if swapped_coordinates and area_id != "city-3":
         feature = {
             "type": "Feature",
             "properties": area_properties,
