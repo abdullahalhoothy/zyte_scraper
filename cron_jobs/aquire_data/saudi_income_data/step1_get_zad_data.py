@@ -16,82 +16,14 @@ def swap_coordinates(nested_coords):
     return recursive_swap(nested_coords)
 
 
-def convert_columnar_to_geojson(data, coordinates_list):
-    area_names = data["Area Name"]
-    num_rows = len(area_names)
-
-    # Resulting feature collection
-    geojson = {"type": "FeatureCollection", "features": []}
-
-    # Iterate row-wise
-    for i in range(num_rows):
-        properties = {}
-        for key, value_list in data.items():
-            val = value_list[i] if i < len(value_list) else None
-            # Convert "" to None or 0 as appropriate
-            if val == "":
-                val = 0
-            # Try to convert numeric strings
-            if isinstance(val, str):
-                try:
-                    if "%" in val:
-                        val = val  # Keep as percentage string
-                    else:
-                        val = float(val)
-                except:
-                    pass
-
-            properties[key] = val
-
-        # Add required fields (customize as needed)
-        feature = {
-            "type": "Feature",
-            "properties": {
-                "id": properties["id"],  # unique ID
-                "name": properties["name"],
-                "type": properties["type"],
-                "Area Name": properties["Area Name"],
-                **properties,
-            },
-            "geometry": {"type": "Polygon", "coordinates": coordinates_list[i]},
-        }
-        geojson["features"].append(feature)
-
-    return geojson
-
-
-# Prepare final output dictionary
-outputJson = {
-    "Area Name": [],
-    "Total Population": [],
-    "Total Males": [],
-    "Total Females": [],
-    "Total Saudis": [],
-    "Total Non-saudis": [],
-    "Saudis population (%)": [],
-    "Male population (%)": [],
-    "Female population (%)": [],
-    # New Income Keys
-    "Overall Average Income": [],
-    "Average Male Income": [],
-    "Average Female Income": [],
-    "Average Saudi Income": [],
-    "Average Non-Saudi Income": [],
-    "Average Saudi Male Income": [],
-    "Average Saudi Female Income": [],
-    "Average Non-Saudi Male Income": [],
-    "Average Non-Saudi Female Income": [],
-}
-
 area_list = [
-    # "emirate-1",
-    "city-3"
+    # "emirate-1", #eastern region
+    "city-3" #riyadh
 ]
-area_ids = []
-coordinates = []
-name = []
-area_type = []
 
+# Change from lists to dictionary with area_id as key
+area_data = {}  # This will store all data by area_id
+geojson_features = []  # This will store the final GeoJSON features
 
 url = "https://api.map.910ths.sa/api/graphql/"
 headers = {"Content-Type": "application/json"}
@@ -203,24 +135,42 @@ nonSaudiFemale_income = response.json()["data"]["nonSaudiFemale"]["facts"]
 
 print("Total Areas: {}".format(len(areas)))
 
+# Convert income data to dictionaries for easier lookup by area name
+income_data = {
+    "all": {item["area"]["name"]: item["value"] for item in overall_income},
+    "male": {item["area"]["name"]: item["value"] for item in males_income},
+    "female": {item["area"]["name"]: item["value"] for item in females_income},
+    "saudi": {item["area"]["name"]: item["value"] for item in saudi_income},
+    "nonSaudi": {item["area"]["name"]: item["value"] for item in nonSaudi_income},
+    "saudiMale": {item["area"]["name"]: item["value"] for item in saudiMale_income},
+    "saudiFemale": {item["area"]["name"]: item["value"] for item in saudiFemale_income},
+    "nonSaudiMale": {item["area"]["name"]: item["value"] for item in nonSaudiMale_income},
+    "nonSaudiFemale": {item["area"]["name"]: item["value"] for item in nonSaudiFemale_income},
+}
+
 # Fetch demographic data per area
 for idx, data in enumerate(areas):
-    all_average_income = 0
-    average_male_income = 0
-    average_female_income = 0
-    average_saudi_income = 0
-    average_non_saudi_income = 0
-    average_saudi_male_income = 0
-    average_saudi_female_income = 0
-    average_non_saudi_male_income = 0
-    average_non_saudi_female_income = 0
-
     area_id = data["area"]["id"]
     area_name = data["area"]["name"]
-    total_income = data["value"]
+    
+    print(f"Processing Area: {area_name}")
 
-    ## geting area codinates
+    # Initialize area data dictionary
+    area_properties = {
+        "id": area_id,
+        "Area Name": area_name,
+        "Overall Average Income": income_data["all"].get(area_name, 0),
+        "Average Male Income": income_data["male"].get(area_name, 0),
+        "Average Female Income": income_data["female"].get(area_name, 0),
+        "Average Saudi Income": income_data["saudi"].get(area_name, 0),
+        "Average Non-Saudi Income": income_data["nonSaudi"].get(area_name, 0),
+        "Average Saudi Male Income": income_data["saudiMale"].get(area_name, 0),
+        "Average Saudi Female Income": income_data["saudiFemale"].get(area_name, 0),
+        "Average Non-Saudi Male Income": income_data["nonSaudiMale"].get(area_name, 0),
+        "Average Non-Saudi Female Income": income_data["nonSaudiFemale"].get(area_name, 0),
+    }
 
+    # Get area coordinates and metadata
     get_area_shape = """
       query getAreaShape($areaId: String!, $epsilon: Float!) {
         area(id: $areaId) {
@@ -242,52 +192,18 @@ for idx, data in enumerate(areas):
 
     response_data = requests.post(url, headers=headers, data=payload_data)
     json_data = response_data.json()["data"]
-    coordinates.extend(json_data["area"].get("simplifiedShape", []))
-    name.append(json_data["area"].get("name", " "))
-    area_type.append(json_data["area"].get("type", " "))
-    area_ids.append(area_id)
+    
+    # Get coordinates and swap them
+    if len(json_data["area"].get("simplifiedShape", []))>2:
+        # manually verify which shapes are being sent
+        pause=1
+    raw_coordinates = json_data["area"].get("simplifiedShape", [])[0]
+    swapped_coordinates = swap_coordinates(raw_coordinates) if raw_coordinates else []
+    
+    area_properties["name"] = json_data["area"].get("name", "")
+    area_properties["type"] = json_data["area"].get("type", "")
 
-    for all_avg_income in overall_income:
-        if area_name == all_avg_income.get("area", []).get("name"):
-            all_average_income = all_avg_income.get("value", 0)
-
-    for avg_male_income in males_income:
-        if area_name == avg_male_income.get("area", []).get("name"):
-            average_male_income = avg_male_income.get("value", 0)
-    for avg_female_income in females_income:
-        if area_name == avg_female_income.get("area", []).get("name"):
-            average_female_income = avg_female_income.get("value", 0)
-
-    for avg_saudi_income in saudi_income:
-        if area_name == avg_saudi_income.get("area", []).get("name"):
-            average_saudi_income = avg_saudi_income.get("value", 0)
-    for avg_nonSaudi_income in nonSaudi_income:
-        if area_name == avg_nonSaudi_income.get("area", []).get("name"):
-            average_non_saudi_income = avg_nonSaudi_income.get("value", 0)
-
-    for avg_saudi_male_income in saudiMale_income:
-        if area_name == avg_saudi_male_income.get("area", []).get("name"):
-            average_saudi_male_income = avg_saudi_male_income.get("value", 0)
-    for avg_saudi_female_income in saudiFemale_income:
-        if area_name == avg_saudi_female_income.get("area", []).get("name"):
-            average_saudi_female_income = avg_saudi_female_income.get(
-                "value", 0
-            )
-
-    for avg_nonSaudiMale_income in nonSaudiMale_income:
-        if area_name == avg_nonSaudiMale_income.get("area", []).get("name"):
-            average_non_saudi_male_income = avg_nonSaudiMale_income.get(
-                "value", 0
-            )
-    for avg_nonSaudiFemale_income in nonSaudiFemale_income:
-        if area_name == avg_nonSaudiFemale_income.get("area", []).get("name"):
-            average_non_saudi_female_income = avg_nonSaudiFemale_income.get(
-                "value", 0
-            )
-
-    print(f"Processing Area: {area_name}")
-    outputJson["Area Name"].append(area_name)
-
+    # Get demographic data
     payload_demo = json.dumps(
         {
             "operationName": "getDemographicData",
@@ -356,98 +272,56 @@ for idx, data in enumerate(areas):
     saudis = extract_value("saudiPopulation")
     non_saudis = extract_value("nonSaudiPopulation")
 
-    outputJson["Total Population"].append(total)
-    outputJson["Total Males"].append(males)
-    outputJson["Total Females"].append(females)
-    outputJson["Total Saudis"].append(saudis)
-    outputJson["Total Non-saudis"].append(non_saudis)
-    outputJson["Male population (%)"].append(
-        f"{round((males / total) * 100, 2) if total else 0}%"
-    )
-    outputJson["Female population (%)"].append(
-        f"{round((females / total) * 100, 2) if total else 0}%"
-    )
-    outputJson["Saudis population (%)"].append(
-        f"{round((saudis / total) * 100, 2) if total else 0}%"
-    )
-    outputJson["Overall Average Income"].append(all_average_income)
-    outputJson["Average Male Income"].append(average_male_income)
-    outputJson["Average Female Income"].append(average_female_income)
+    # Add demographic data to properties
+    area_properties.update({
+        "Total Population": total,
+        "Total Males": males,
+        "Total Females": females,
+        "Total Saudis": saudis,
+        "Total Non-saudis": non_saudis,
+        "Male population (%)": f"{round((males / total) * 100, 2) if total else 0}%",
+        "Female population (%)": f"{round((females / total) * 100, 2) if total else 0}%",
+        "Saudis population (%)": f"{round((saudis / total) * 100, 2) if total else 0}%",
+    })
 
-    outputJson["Average Saudi Income"].append(average_saudi_income)
-    outputJson["Average Non-Saudi Income"].append(average_non_saudi_income)
-    outputJson["Average Saudi Male Income"].append(average_saudi_male_income)
-    outputJson["Average Saudi Female Income"].append(
-        average_saudi_female_income
-    )
-    outputJson["Average Non-Saudi Male Income"].append(
-        average_non_saudi_male_income
-    )
-    outputJson["Average Non-Saudi Female Income"].append(
-        average_non_saudi_female_income
-    )
-
+    # Add dynamic age group data
     for byGender in demo_data["byGenderAndAgeGroupPopulation"]["facts"]:
-        if (
-            byGender["splits"][0]["id"] + "_" + byGender["splits"][1]["id"]
-            in outputJson.keys()
-        ):
-            outputJson[
-                byGender["splits"][0]["id"] + "_" + byGender["splits"][1]["id"]
-            ].append(byGender["value"])
-        else:
-            outputJson[
-                byGender["splits"][0]["id"] + "_" + byGender["splits"][1]["id"]
-            ] = []
-            outputJson[
-                byGender["splits"][0]["id"] + "_" + byGender["splits"][1]["id"]
-            ].append(byGender["value"])
+        key = byGender["splits"][0]["id"] + "_" + byGender["splits"][1]["id"]
+        area_properties[key] = byGender["value"]
 
     for byNation in demo_data["byNationalityAndAgeGroupPopulation"]["facts"]:
-        if (
-            byNation["splits"][0]["id"] + "_" + byNation["splits"][1]["id"]
-            in outputJson.keys()
-        ):
-            outputJson[
-                byNation["splits"][0]["id"] + "_" + byNation["splits"][1]["id"]
-            ].append(byNation["value"])
-        else:
-            outputJson[
-                byNation["splits"][0]["id"] + "_" + byNation["splits"][1]["id"]
-            ] = []
-            outputJson[
-                byNation["splits"][0]["id"] + "_" + byNation["splits"][1]["id"]
-            ].append(byNation["value"])
+        key = byNation["splits"][0]["id"] + "_" + byNation["splits"][1]["id"]
+        area_properties[key] = byNation["value"]
 
+    # Create GeoJSON feature directly
+    if swapped_coordinates:  # Only create feature if we have coordinates
+        feature = {
+            "type": "Feature",
+            "properties": area_properties,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": swapped_coordinates
+            }
+        }
+        geojson_features.append(feature)
 
-if outputJson:
-    os.makedirs("output_csv_files", exist_ok=True)
+# Create final GeoJSON
+final_geojson = {
+    "type": "FeatureCollection",
+    "features": geojson_features
+}
+
+# Save to file
+if geojson_features:
     os.makedirs("output_geo_json_files", exist_ok=True)
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Add current working directory to the paths
-    current_path = os.getcwd()
+    census_path = r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_income_data"
     filename_json = os.path.join(
-        current_path,
+        census_path,
         "output_geo_json_files",
         f"Output_data_{timestamp}.geojson",
     )
 
-    # Dynamically collect all keys (including dynamically added ones)
-    all_keys = list(outputJson.keys())
-
-    # Ensure all value lists have the same length
-    max_len = max(len(v) for v in outputJson.values())
-    for key in all_keys:
-        while len(outputJson[key]) < max_len:
-            outputJson[key].append("")  # Fill missing data with empty strings
-
-    outputJson["id"] = area_ids
-    outputJson["name"] = name
-    outputJson["type"] = area_type
-    swapped_coords = swap_coordinates(coordinates)
-    geo_Json_data = convert_columnar_to_geojson(outputJson, swapped_coords)
-
     with open(filename_json, "w", encoding="utf-8") as f:
-        json.dump(geo_Json_data, f, ensure_ascii=False, indent=4)
+        json.dump(final_geojson, f, ensure_ascii=False, indent=4)
     print(f"\n📁 Saved collected Data to Geo-json file: {filename_json}")
