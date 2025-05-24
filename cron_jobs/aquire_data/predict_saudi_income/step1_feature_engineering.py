@@ -399,11 +399,7 @@ class GeoIntelligence:
                 print(f"Saved: {output_file}")
 
 
-def adapt(finner_data, coarser_grid):
-  merged = gpd.sjoin(finner_data, coarser_grid.set_crs(epsg=4326), how="right", predicate="within")
-  merged =  gpd.GeoDataFrame(merged.groupby("geometry", observed=False).mean().reset_index())
-  mask = merged.final_score.isna()
-  return merged.loc[~mask]
+
 
 # Main execution code
 # Process all versions from 8 to 16
@@ -502,7 +498,7 @@ for version in range(8, max_version + 1):
     if not os.path.isfile(output_geojson):
         output_mx = gpd.read_file(output_geojson_mx)
         population_data = gpd.GeoDataFrame.from_features(pd.read_json(input_path).features)
-        output = adapt(output_mx, population_data)
+        # output = adapt(output_mx, population_data)
         
         output_geojson = os.path.join(output_dir, "all_features.json")
         output.to_file(output_geojson, driver="GeoJSON")
