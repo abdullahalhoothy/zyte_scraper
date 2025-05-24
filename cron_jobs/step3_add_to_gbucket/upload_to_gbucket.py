@@ -80,6 +80,7 @@ def upload_directory_to_gcp(
                 # This preserves the logical structure rather than the physical one
                 if sub_dir:
                     gcs_rel_path = f"{sub_dir}/{date}" if rel_path == sub_dir else f"{sub_dir}/{date}/{os.path.relpath(root, abs_source_path)}"
+                    gcs_rel_path = gcs_rel_path.replace('\\', '/')
                 else:
                     gcs_rel_path = f"{rel_path}/{date}"
                

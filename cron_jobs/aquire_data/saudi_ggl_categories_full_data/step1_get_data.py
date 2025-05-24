@@ -189,16 +189,9 @@ async def main():
     # responses = await fetch_data(boolean, "category_search", obtained_auth_token)
     # Define all the queries to run
     queries = [
-        ("Jeddah", "electrician"),
-        ("Jeddah", "university"),
-        ("Jeddah", "Museum"),
-        ("Jeddah", "plumber"),
-        ("Jeddah", "police"),
-        ("Jeddah", "dental_clinic")
+        ("Riyadh", "@BMW@"),
     ]
-    
-    # Specify search type for each query (you can make this more dynamic if needed)
-    search_type = "category_search"
+    search_type = "keyword_search"
     
     # Create tasks for all queries
     tasks = []

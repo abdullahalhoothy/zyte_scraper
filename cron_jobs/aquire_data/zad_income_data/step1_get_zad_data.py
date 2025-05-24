@@ -313,12 +313,12 @@ final_geojson = {
 
 # Save to file
 if geojson_features:
-    os.makedirs("output_geo_json_files", exist_ok=True)
+    os.makedirs("zad_output_geo_json_files", exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     census_path = r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_income_data"
     filename_json = os.path.join(
         census_path,
-        "output_geo_json_files",
+        "zad_output_geo_json_files",
         f"Output_data_{timestamp}.geojson",
     )
 
