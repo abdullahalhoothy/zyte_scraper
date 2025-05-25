@@ -1,18 +1,14 @@
-import requests
 import json
-import csv
 import os
-import numpy as np
-from datetime import datetime
-import logging
-import urllib3
-from time import sleep
+import sys
 
-MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-log_file_path = os.path.join(MODULE_DIR, "population.log")
-logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='w', format='%(asctime)s - %(levelname)s - %(message)s')
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# Add parent directory (saudi_census) to path to import saudi_census_common
+current_script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(current_script_dir, ".."))
+sys.path.append(parent_dir)
+import saudi_census_common as common
 
+# Entity-Specific Configuration
 COLUMN_MAPPING = {
     'level': 'Level',
     'main_id': 'Main_ID',
@@ -28,168 +24,46 @@ COLUMN_MAPPING = {
     'centroid_lon': 'Longitude'
 }
 
-def calculate_centroid(coordinates):
-    """Calculate the centroid of a polygon using NumPy."""
-    if not coordinates or not coordinates[0]:
-        return None, None
-    
-    points = np.array(coordinates[0])
-    longitude = np.mean(points[:, 0])
-    latitude = np.mean(points[:, 1])
-    
-    return latitude, longitude
+ENTITY_TYPE = "population"
+BASE_URL_TEMPLATE_PART = "pop" # Used to construct the API URL, e.g. "pop" for population, "hh" for household
 
-def fetch_with_pagination(url, params, max_retries=3):
-    """Fetch data with pagination and retry logic."""
-    all_features = []
-    offset = 0
-    result_limit = 10000  # Adjust this value based on server limitations
-    
-    while True:
-        current_params = params.copy()
-        current_params.update({
-            'resultOffset': offset,
-            'resultRecordCount': result_limit
-        })
-        
-        for attempt in range(max_retries):
-            try:
-                response = requests.get(url, params=current_params, verify=False, timeout=30)
-                response.raise_for_status()
-                data = response.json()
-                
-                features = data.get('features', [])
-                all_features.extend(features)
-                
-                # Check if we've received all features
-                if len(features) < result_limit:
-                    return all_features
-                
-                offset += result_limit
-                # Add a small delay between requests to avoid overwhelming the server
-                sleep(0.5)
-                break
-                
-            except requests.exceptions.RequestException as e:
-                if attempt == max_retries - 1:
-                    logging.error(f"Failed after {max_retries} attempts: {str(e)}")
-                    return all_features
-                logging.warning(f"Attempt {attempt + 1} failed, retrying...")
-                sleep(2 ** attempt)  # Exponential backoff
-    
-    return all_features
-
-def process_census_data(level):
-    """Fetch and process census data for a specific level."""
-    base_url = f"https://maps.saudicensus.sa/arcgis/rest/services/results_grid_pop_v{level}/FeatureServer/0/query"
-    params = {
-        'where': '1=1',
-        'outFields': '*',
-        'returnGeometry': 'true',
-        'f': 'geojson'
+def specific_fields_extractor_population(properties):
+    """
+    Extracts population-specific fields from the properties dictionary of a feature.
+    Uses the global COLUMN_MAPPING for population.
+    """
+    return {
+        'pcnt': properties.get('PCNT'),
+        'pm_cnt': properties.get('PM_CNT'),
+        'pf_cnt': properties.get('PF_CNT'),
+        'pden_km2': properties.get('PDEN_KM2'),
+        'ymed_age': properties.get('YMED_AGE'),
+        'ymed_age_m': properties.get('YMED_AGE_M'),
+        'ymed_age_fm': properties.get('YMED_AGE_FM'),
     }
-    
-    try:
-        logging.info(f"Fetching data for level {level}...")
-        features = fetch_with_pagination(base_url, params)
-        
-        if not features:
-            logging.warning(f"No features found for level {level}")
-            return []
-        
-        # Create directory for JSON files
-        json_files_path = os.path.join(MODULE_DIR, "population_json_files")
-        os.makedirs(f'{json_files_path}/v{level}', exist_ok=True)
-        
-        # Process features
-        processed_features = []
-        
-        for feature in features:
-            centroid_lat, centroid_lon = calculate_centroid(feature['geometry']['coordinates'])
-            
-            processed_feature = {
-                'level': level,
-                'main_id': feature['properties'].get('MAIN_ID'),
-                'gid': feature['properties'].get('GID'),
-                'pcnt': feature['properties'].get('PCNT'),
-                'pm_cnt': feature['properties'].get('PM_CNT'),
-                'pf_cnt': feature['properties'].get('PF_CNT'),
-                'pden_km2': feature['properties'].get('PDEN_KM2'),
-                'ymed_age': feature['properties'].get('YMED_AGE'),
-                'ymed_age_m': feature['properties'].get('YMED_AGE_M'),
-                'ymed_age_fm': feature['properties'].get('YMED_AGE_FM'),
-                'centroid_lat': centroid_lat,
-                'centroid_lon': centroid_lon
-            }
-            
-            processed_features.append(processed_feature)
-        
-        # Save all features for this level
-        output_json = {
-            'type': 'FeatureCollection',
-            'features': features
-        }
-        json_files_path = os.path.join(MODULE_DIR, "population_json_files")
-        with open(f'{json_files_path}/v{level}/all_features.geojson', 'w') as f:
-            json.dump(output_json, f, indent=2)
-        
-        logging.info(f"Successfully processed {len(processed_features)} features for level {level}")
-        return processed_features
-    
-    except Exception as e:
-        logging.error(f"Error processing level {level}: {str(e)}")
-        return []
-
-# The save_to_csv and main functions remain the same as in your original code
-
-def save_to_csv(features, filename, fieldnames):
-    """Save features to CSV with mapped column names"""
-    filename = os.path.join(MODULE_DIR, filename)
-    with open(filename, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=[COLUMN_MAPPING[field] for field in fieldnames])
-        
-        # Write header
-        writer.writeheader()
-        
-        # Write rows with mapped field names
-        for feature in features:
-            mapped_feature = {COLUMN_MAPPING[k]: v for k, v in feature.items() if k in fieldnames}
-            writer.writerow(mapped_feature)
-
-def main():
-    # Process levels 8 through 14
-    logging.info("Processing levels 8 through 14...")
-
-    all_features = []
-    for level in range(8, 17):
-        logging.info(f"Processing level {level}...")
-        features = process_census_data(level)
-        all_features.extend(features)
-
-    # Convert to numpy array for faster processing
-    if all_features:
-        # Save all data to CSV
-        csv_fields = [
-            'level', 'main_id', 'gid', 'pcnt', 'pm_cnt', 
-            'pf_cnt', 'pden_km2', 'ymed_age', 'ymed_age_m', 'ymed_age_fm',
-            'centroid_lat', 'centroid_lon'
-        ]
-        
-        # save to json 
-        json_files_path = os.path.join(MODULE_DIR, "all_features.geojson")
-        with open(json_files_path, 'w') as f:
-            json.dump(all_features, f, indent=2)
-
-        logging.info(f"Processing complete. Processed {len(all_features)} features.")
-        logging.info("Files saved:")
-        logging.info("- Level-specific CSV files: census_data_level_{8-14}.csv")
-        logging.info("- Combined data in 'population.csv'")
-    else:
-        logging.info("No data was processed successfully.")
-
 
 if __name__ == "__main__":
-    print("Script Starting....")
-    main()
+    print(f"Script Starting for {ENTITY_TYPE}...")
+    
+    # MODULE_DIR is used by common.setup_logging and common.main_step1_runner
+    # It refers to the directory of the current script (step1_get_population_json.py)
+    module_dir = os.path.dirname(os.path.abspath(__file__)) 
 
-
+    # Setup logging for this specific script run
+    # common.setup_logging(module_dir, ENTITY_TYPE) # This will create e.g. population.log
+    # Logging for step1 is now done within main_step1_runner
+    
+    # The column_mapping is passed here as it's used by the specific_fields_extractor,
+    # which in turn is used by the common.process_census_data_generic function.
+    # The keys in specific_fields_extractor_population are already the desired keys for the final JSON.
+    # COLUMN_MAPPING itself is more for renaming headers if saving to CSV or for mapping raw API responses.
+    # The common.process_census_data_generic will handle the 'MAIN_ID', 'GID', 'level', 'centroid_lat', 'centroid_lon'.
+    # The specific_fields_extractor only needs to provide the entity-specific data.
+    common.main_step1_runner(
+        module_dir=module_dir,
+        entity_type=ENTITY_TYPE,
+        base_url_template_part=BASE_URL_TEMPLATE_PART,
+        column_mapping=COLUMN_MAPPING, 
+        specific_fields_extractor=specific_fields_extractor_population
+    )
+    print(f"Script finished for {ENTITY_TYPE}.")
