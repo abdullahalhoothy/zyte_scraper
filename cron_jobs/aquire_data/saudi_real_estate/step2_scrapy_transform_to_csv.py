@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from datetime import datetime
 
 category_mapping_en = {
     1: "apartment_for_rent",
@@ -39,6 +40,18 @@ def process_real_estate_data(file_path):
     
     if 'rent_period' not in df.columns or 'category_id' not in df.columns:
         raise ValueError("CSV must contain 'rent_period' and 'category_id' columns")
+    
+    # Process listing creation timestamp (from server)
+    if 'listing_created_timestamp' in df.columns:
+        df['listing_created_timestamp'] = pd.to_numeric(df['listing_created_timestamp'], errors='coerce')
+        # Convert to readable datetime
+        df['listing_created_date'] = pd.to_datetime(df['listing_created_timestamp'], unit='s', errors='coerce')
+    
+    # Process extraction timestamp (when our code ran)
+    if 'extraction_timestamp' in df.columns:
+        df['extraction_timestamp'] = pd.to_numeric(df['extraction_timestamp'], errors='coerce')
+        # Convert to readable datetime
+        df['extraction_date'] = pd.to_datetime(df['extraction_timestamp'], unit='s', errors='coerce')
     
     df['category_id'] = pd.to_numeric(df['category_id'], errors='coerce')
     df = df.rename(columns={'category': 'category_ar'})

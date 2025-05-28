@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 from scrapy.crawler import CrawlerProcess
 from scrapy import Spider, Request
@@ -7,18 +8,21 @@ load_dotenv()
 
 BASE_URL = 'https://sa.aqar.fm'
 
-
 with open('cron_jobs/secret_saudi_real_estate.json') as f:
     config_data = json.load(f)
 ZYTE_API_KEY = config_data.get("zyte_api_key")
-# Set the environment variable - THIS IS THE KEY FIX
 os.environ['ZYTE_API_KEY'] = ZYTE_API_KEY
 os.makedirs(os.path.join(os.path.dirname(__file__), 'ignore'), exist_ok=True)
-
 
 class AqarStandaloneSpider(Spider):
     name = "saudi_real_estate"
     allowed_domains = ["aqar.fm"]    
+    
+    def __init__(self):
+        super().__init__()
+        # Store the extraction timestamp when spider starts
+        self.extraction_timestamp = int(datetime.now().timestamp())
+    
     custom_settings = {
         'FEEDS': {
             os.path.join(os.path.dirname(__file__), 'ignore', 'raw_saudi_real_estate.csv'): {
@@ -87,6 +91,10 @@ class AqarStandaloneSpider(Spider):
         data = json.loads(response.text)
         for listing in data.get('data', {}).get('Web', {}).get('find', {}).get('listings', []):
             location = listing.get('location', {})
+            
+            # Extract listing creation timestamp from server
+            listing_created_timestamp = listing.get('create_time') or listing.get('published_at')
+            
             yield {
                 'url': f'{BASE_URL}{listing.get("path")}',
                 'price': listing.get('price'),
@@ -99,6 +107,8 @@ class AqarStandaloneSpider(Spider):
                 'title': listing.get('title'),
                 'address': listing.get('address'),
                 'rent_period': listing.get('rent_period'),
+                'listing_created_timestamp': listing_created_timestamp,  # When listing was created on server
+                'extraction_timestamp': self.extraction_timestamp,  # When our code ran to extract data
                 'data': json.dumps(listing),
             }
 
