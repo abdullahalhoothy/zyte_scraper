@@ -1,6 +1,7 @@
 import os
 import json
 import random
+from collections import defaultdict
 
 
 def update_keys(data, column_mapping):
@@ -19,6 +20,7 @@ def update_keys(data, column_mapping):
 def process_json_files(folder_path, column_mapping, primary_density_key, fallback_density_key=None):
     """
     Update keys in ALL JSON files and calculate normalized density based on available data.
+    Normalization is done per zoom level (0-100 scale based on min/max within each level).
     
     Args:
         folder_path (str): Path to the folder containing JSON files
@@ -29,6 +31,10 @@ def process_json_files(folder_path, column_mapping, primary_density_key, fallbac
     if fallback_density_key is None:
         fallback_density_key = primary_density_key
     
+    # First pass: collect all data and organize by zoom level
+    files_data = {}
+    zoom_level_values = defaultdict(list)  # zoom_level -> list of values
+    
     for root, _, files in os.walk(folder_path):
         for file_name in files:
             if file_name.lower().endswith("json"):
@@ -37,98 +43,107 @@ def process_json_files(folder_path, column_mapping, primary_density_key, fallbac
                     with open(file_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
 
-                    updated_data = update_keys(data, column_mapping)  # Keys are updated first
-
+                    updated_data = update_keys(data, column_mapping)
+                    
+                    # Determine which key to use for density calculation
                     key_for_density_calculation = primary_density_key
-                    source_key_name_for_print = primary_density_key
-
                     features_list = updated_data.get("features", [])
-                    final_processing_message = ""
-
+                    
                     if features_list:
-                        # Determine if primary density key is "present" with a non-null value in a sample
-                        has_primary_key_with_value_in_sample = False
+                        # Sample to check if primary key has valid values
                         sample_size = min(50, len(features_list))
-
                         sampled_features = random.sample(features_list, k=sample_size)
-                        for feature_in_sample in sampled_features:
-                            properties_in_sample = feature_in_sample.get("properties", {})
-                            if properties_in_sample.get(primary_density_key) is not None:
-                                has_primary_key_with_value_in_sample = True
-                                break
-
-                        if not has_primary_key_with_value_in_sample and fallback_density_key != primary_density_key:
+                        has_primary_key = any(
+                            feature.get("properties", {}).get(primary_density_key) is not None
+                            for feature in sampled_features
+                        )
+                        
+                        if not has_primary_key and fallback_density_key != primary_density_key:
                             key_for_density_calculation = fallback_density_key
-                            source_key_name_for_print = f"{fallback_density_key} (fallback)"
-                            print(
-                                f"Info: In '{file_path}', all '{primary_density_key}' are null values in sample. Using '{key_for_density_calculation}'."
-                            )
-                        else:
-                            source_key_name_for_print = f"{primary_density_key} (found in sample)"
-                            print(
-                                f"Info: In '{file_path}', '{primary_density_key}' found with valid values in sample. Using '{key_for_density_calculation}'."
-                            )
-
-                        # Collect values for normalization from the chosen key across ALL features
-                        values_for_normalization = []
-                        for feature in features_list:
-                            properties = feature.get("properties", {})
-                            current_value_str = properties.get(key_for_density_calculation)
-                            if current_value_str is not None:
-                                try:
-                                    values_for_normalization.append(float(current_value_str))
-                                except ValueError:
-                                    grid_id_info = properties.get("Grid_ID", "N/A")
-                                    print(
-                                        f"Warning: Could not convert {key_for_density_calculation} '{current_value_str}' to float in '{file_path}' for feature GID '{grid_id_info}'. Skipping this value for normalization."
-                                    )
-
-                        min_val = 0.0
-                        max_val = 0.0
-                        if values_for_normalization:
-                            min_val = min(values_for_normalization)
-                            max_val = max(values_for_normalization)
-                        elif features_list:
-                            print(
-                                f"Warning: No valid numeric values found for '{key_for_density_calculation}' in '{file_path}'. All 'density' values will be 0.0."
-                            )
-
-                        # Calculate and add normalized "density" property to each feature
-                        for feature in features_list:
-                            properties = feature.get("properties", {})
-                            current_value_str = properties.get(key_for_density_calculation)
-                            normalized_density_value = 0.0
-
-                            if current_value_str is not None and values_for_normalization:
-                                try:
-                                    current_value_float = float(current_value_str)
-                                    if max_val == min_val:
-                                        normalized_density_value = 0.0
-                                    else:
-                                        normalized_density_value = (
-                                            (current_value_float - min_val) / (max_val - min_val)
-                                        ) * 100
-                                    properties["density"] = round(normalized_density_value, 4)
-                                except ValueError:
-                                    properties["density"] = 0.0
-                            else:
-                                properties["density"] = 0.0
-
-                            feature["properties"] = properties
-
-                        final_processing_message = f"Processed: {file_path}. Keys updated. Density calculated from '{source_key_name_for_print}'."
-
-                    else:
-                        print(f"Info: No features found in {file_path}. Only top-level keys (if any) updated via mapping.")
-                        final_processing_message = f"Processed: {file_path}. Keys updated (no features for density calculation)."
-
-                    # Write back to the SAME file
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        json.dump(updated_data, f, ensure_ascii=False, indent=2)
-
-                    print(final_processing_message)
-
+                            print(f"Info: In '{file_path}', using fallback key '{fallback_density_key}'.")
+                    
+                    # Store file data for second pass
+                    files_data[file_path] = {
+                        'data': updated_data,
+                        'density_key': key_for_density_calculation
+                    }
+                    
+                    # Collect values by zoom level
+                    for feature in features_list:
+                        properties = feature.get("properties", {})
+                        zoom_level = properties.get("Level")
+                        density_value_str = properties.get(key_for_density_calculation)
+                        
+                        if zoom_level is not None and density_value_str is not None:
+                            try:
+                                density_value = float(density_value_str)
+                                zoom_level_values[zoom_level].append(density_value)
+                            except ValueError:
+                                pass  # Skip invalid values
+                    
                 except json.JSONDecodeError:
                     print(f"Skipping invalid JSON: {file_path}")
                 except Exception as e:
-                    print(f"Error processing {file_path}: {e}")
+                    print(f"Error reading {file_path}: {e}")
+    
+    # Calculate min/max for each zoom level
+    zoom_level_ranges = {}
+    for zoom_level, values in zoom_level_values.items():
+        if values:
+            zoom_level_ranges[zoom_level] = {
+                'min': min(values),
+                'max': max(values)
+            }
+            print(f"Zoom Level {zoom_level}: min={zoom_level_ranges[zoom_level]['min']}, max={zoom_level_ranges[zoom_level]['max']}, count={len(values)}")
+    
+    # Second pass: normalize and write files
+    for file_path, file_info in files_data.items():
+        try:
+            updated_data = file_info['data']
+            key_for_density_calculation = file_info['density_key']
+            features_list = updated_data.get("features", [])
+            
+            if features_list:
+                # Normalize density for each feature based on its zoom level
+                for feature in features_list:
+                    properties = feature.get("properties", {})
+                    zoom_level = properties.get("Level")
+                    current_value_str = properties.get(key_for_density_calculation)
+                    normalized_density_value = 0.0
+                    
+                    if (zoom_level is not None and 
+                        current_value_str is not None and 
+                        zoom_level in zoom_level_ranges):
+                        
+                        try:
+                            current_value_float = float(current_value_str)
+                            min_val = zoom_level_ranges[zoom_level]['min']
+                            max_val = zoom_level_ranges[zoom_level]['max']
+                            
+                            if max_val == min_val:
+                                # All values at this zoom level are the same
+                                normalized_density_value = 0.0  # Middle value
+                            else:
+                                # Normalize to 0-100 scale
+                                normalized_density_value = (
+                                    (current_value_float - min_val) / (max_val - min_val)
+                                ) * 100
+                            
+                            properties["density"] = round(normalized_density_value, 4)
+                        except ValueError:
+                            properties["density"] = 0.0
+                    else:
+                        properties["density"] = 0.0
+                    
+                    feature["properties"] = properties
+                
+                print(f"Processed: {file_path}. Keys updated. Density normalized by zoom level using '{key_for_density_calculation}'.")
+            else:
+                print(f"Info: No features found in {file_path}. Only top-level keys updated.")
+            
+            # Write back to the SAME file
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(updated_data, f, ensure_ascii=False, indent=2)
+                
+        except Exception as e:
+            print(f"Error processing {file_path}: {e}")
