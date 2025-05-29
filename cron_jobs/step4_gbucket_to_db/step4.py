@@ -275,12 +275,22 @@ def insert_data_into_table(conn, df, table_name, schema):
             )
             cursor.execute(drop_temp)
             
-            # Create temp table with same structure
-            create_temp = sql.SQL("CREATE TABLE {}.{} (LIKE {}.{})").format(
+            # CHANGED: Create temp table based on DataFrame structure instead of existing table
+            columns = []
+            for col in df.columns:
+                dtype = (
+                    "INTEGER"
+                    if df[col].dtype == "int64"
+                    else "REAL" if df[col].dtype == "float64" else "TEXT"
+                )
+                columns.append(
+                    sql.SQL("{} {}").format(sql.Identifier(col), sql.SQL(dtype))
+                )
+
+            create_temp = sql.SQL("CREATE TABLE {}.{} ({})").format(
                 sql.Identifier(schema),
                 sql.Identifier(temp_table),
-                sql.Identifier(schema),
-                sql.Identifier(table_name),
+                sql.SQL(", ").join(columns),
             )
             cursor.execute(create_temp)
             
@@ -335,7 +345,7 @@ def insert_data_into_table(conn, df, table_name, schema):
         except Exception as e:
             print(f"Error during copy to {schema}.{table_name}: {e}")
             raise
-
+        
 def insert_image_metadata(conn, schema, table_name, image_data):
     with conn.cursor() as cursor:
         cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')

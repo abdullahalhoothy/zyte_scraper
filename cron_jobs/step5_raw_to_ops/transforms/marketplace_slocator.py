@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS schema_marketplace.datasets
 )
     """
 
+
 def saudi_real_estate():
     return """
     -- Create schema if it doesn't exist
@@ -32,56 +33,10 @@ def saudi_real_estate():
     
     INSERT INTO schema_marketplace.saudi_real_estate (url, city, price, latitude, longitude, category)
     SELECT url, city, price, latitude, longitude, category
-    FROM raw_schema_marketplace.saudi_real_estate;
-    """
-
-
-def economic():
-    return """
-    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
-    CREATE TABLE IF NOT EXISTS schema_marketplace.economic (
-        longitude DECIMAL(10,6),
-        latitude DECIMAL(10,6),
-        city TEXT,
-        working_age_population TEXT,
-        employed_population TEXT,
-        unemployed_population TEXT,
-        employment_rate TEXT,
-        avg_annual_income TEXT,
-        median_annual_income TEXT,
-        PRIMARY KEY (longitude, latitude)
-    );
-
-    TRUNCATE TABLE schema_marketplace.economic;
-
-    WITH parsed_data AS (
-        SELECT 
-            NULLIF(SPLIT_PART(geo_location, ',', 2), '')::DECIMAL(10,6) as longitude,
-            NULLIF(SPLIT_PART(geo_location, ',', 1), '')::DECIMAL(10,6) as latitude,
-            city,
-            CAST(working_age_population AS TEXT),
-            CAST(employed_population AS TEXT),
-            CAST(unemployed_population AS TEXT),
-            CAST(employment_rate AS TEXT),
-            CAST(avg_annual_income AS TEXT),
-            CAST(median_annual_income AS TEXT)
-        FROM raw_schema_marketplace.generate_economic_slocator_data
-        WHERE geo_location IS NOT NULL
-    )
-    INSERT INTO schema_marketplace.economic
-    SELECT 
-        longitude,
-        latitude,
-        city,
-        working_age_population,
-        employed_population,
-        unemployed_population,
-        employment_rate,
-        avg_annual_income,
-        median_annual_income
-    FROM parsed_data
-    WHERE longitude IS NOT NULL
-    AND latitude IS NOT NULL;
+    FROM raw_schema_marketplace.saudi_real_estate
+    WHERE extraction_date = (
+    SELECT MAX(extraction_date) 
+    FROM raw_schema_marketplace.saudi_real_estate);
     """
 
 
