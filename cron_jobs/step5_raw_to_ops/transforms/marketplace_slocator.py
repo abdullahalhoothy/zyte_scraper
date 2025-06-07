@@ -16,12 +16,12 @@ def saudi_real_estate():
     return """
     -- Create schema if it doesn't exist
     CREATE SCHEMA IF NOT EXISTS schema_marketplace;
-    
+
     -- Create table if it doesn't exist
     CREATE TABLE IF NOT EXISTS schema_marketplace.saudi_real_estate (
         url TEXT NOT NULL,
         city TEXT NULL,
-        price varchar(25) NULL,
+        price BIGINT NULL,  -- Keep as BIGINT
         latitude REAL,
         longitude REAL,
         category TEXT
@@ -30,13 +30,14 @@ def saudi_real_estate():
     -- Truncate the table to ensure clean data
     TRUNCATE TABLE schema_marketplace.saudi_real_estate;
 
-    
+    -- Then no casting needed:
     INSERT INTO schema_marketplace.saudi_real_estate (url, city, price, latitude, longitude, category)
     SELECT url, city, price, latitude, longitude, category
     FROM raw_schema_marketplace.saudi_real_estate
     WHERE extraction_date = (
-    SELECT MAX(extraction_date) 
-    FROM raw_schema_marketplace.saudi_real_estate);
+        SELECT MAX(extraction_date)
+        FROM raw_schema_marketplace.saudi_real_estate
+    );
     """
 
 

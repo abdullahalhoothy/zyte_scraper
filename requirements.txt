@@ -54,3 +54,4 @@ jupyter
 ipykernel
 notebook 
 jupyterlab
+python-bidi

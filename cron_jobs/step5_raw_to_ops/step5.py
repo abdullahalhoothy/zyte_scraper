@@ -45,11 +45,7 @@ def main():
 
     transfos = {
         # "s-locator": ["dbo_operational@marketplace_slocator"],
-        "dev-s-locator": ["dbo_operational@marketplace_slocator"],
-        # "vivi_app": [
-        #     "dbo-coffee@marketplace_products",
-        #     # Add other transformations here as needed
-        # ],
+        "dev-s-locator": ["dbo_operational@marketplace_slocator"]
     }
 
     connections = {}
