@@ -67,7 +67,7 @@ def convert_geojson_to_csv(geojson, output_csv_path):
             
     return str(output_csv_path)
 
-def convert_to_geojson(input_file_path):
+def to_geojson_save_csv(input_file_path, data=None):
     """
     Converts API response JSON to GeoJSON format and CSV.
    
@@ -101,8 +101,9 @@ def convert_to_geojson(input_file_path):
     csv_path = directory / csv_filename
    
     # Load the input JSON file
-    with open(input_file_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    if not data:
+        with open(input_file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
    
     # Combine features from all responses
     all_features = []
@@ -126,19 +127,21 @@ def convert_to_geojson(input_file_path):
         "features": all_features
     }
         
-    # Drop duplicate features based on "id" in properties (keeping the last occurrence)
+    # Drop duplicate features based on "id" in properties (keeping the first occurrence)
     unique_features = {}
     for feature in geojson["features"]:
         if "properties" in feature and "id" in feature["properties"]:
-            unique_features[feature["properties"]["id"]] = feature
+            feature_id = feature["properties"]["id"]
+            # Only add if we haven't seen this ID before
+            if feature_id not in unique_features:
+                unique_features[feature_id] = feature
         else:
             # If feature doesn't have properties or id, keep it
             # We use a generated key to ensure it's kept
             unique_features[f"no_id_{id(feature)}"] = feature
-        
+    
     # Replace features with deduplicated list
     geojson["features"] = list(unique_features.values())
-    
     # Save the GeoJSON file
     with open(geojson_path, 'w', encoding='utf-8') as f:
         json.dump(geojson, f, ensure_ascii=False, indent=2)
@@ -149,7 +152,7 @@ def convert_to_geojson(input_file_path):
     return str(geojson_path), csv_output_path
 
 if __name__ == "__main__":
-    geojson_path, csv_path = convert_to_geojson(r"cron_jobs\aquire_data\saudi_ggl_categories_full_data\saudi_plumber_20250514_231515.json")
+    geojson_path, csv_path = to_geojson_save_csv(r"cron_jobs\aquire_data\saudi_ggl_categories_full_data\saudi_plumber_20250514_231515.json")
     print(f"Converted GeoJSON file saved to: {geojson_path}")
     print(f"Converted CSV file saved to: {csv_path}")
 

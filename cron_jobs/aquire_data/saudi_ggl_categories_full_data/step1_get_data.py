@@ -6,7 +6,7 @@ from datetime import datetime
 # Removed the time import since we'll use asyncio.sleep instead
 
 # Define base URL as a constant to avoid repetition
-BASE_URL = "http://localhost:7005/fastapi"
+BASE_URL = "http://localhost:8000/fastapi"
 LOGIN_URL = f"{BASE_URL}/login"
 FETCH_DATASET_URL = f"{BASE_URL}/fetch_dataset"
 
@@ -30,6 +30,7 @@ async def make_api_call(session, query, token, page_num, search_type, obtained_a
             "zoom_level": 0,
             "radius": 30000,
             "include_only_sub_properties": False,
+            "include_rating_info": True
         },
     }
 
@@ -60,15 +61,15 @@ async def initial_call(query, search_type, obtained_auth_token, all_responses):
             next_token = first_response["data"]["next_page_token"]
             if next_token:
                 tokens_to_process.append(next_token)
-    return tokens_to_process
+    return tokens_to_process, first_response
 
 async def fetch_data(query, search_type, obtained_auth_token):
     city_name, boolean_query = query
     print(f"Starting data collection for query: '{boolean_query}' in {city_name}...")
     
     all_responses = []
-    tokens_to_process = await initial_call(query, search_type, obtained_auth_token, all_responses)
-
+    tokens_to_process, first_response = await initial_call(query, search_type, obtained_auth_token, all_responses)
+    all_responses.append(first_response)
     # Add a smaller delay between queries to avoid overwhelming the server
     # Changed to async sleep
     await asyncio.sleep(10)  # Reduced from 60 seconds to 10 seconds
@@ -153,8 +154,8 @@ async def process_query_and_save(query, search_type, obtained_auth_token):
         with open(full_path, "w", encoding="utf-8") as f:
             json.dump(responses, f, ensure_ascii=False, indent=2)
 
-        from step2_response_to_geojson import convert_to_geojson
-        convert_to_geojson(full_path)
+        from step2_response_to_geojson import to_geojson_save_csv
+        to_geojson_save_csv(full_path, responses)
 
     print(f"\nData for '{boolean_query}' in {city_name} saved to: {full_path}")
     print(f"Total pages collected for '{boolean_query}': {len(responses)}")
@@ -189,9 +190,9 @@ async def main():
     # responses = await fetch_data(boolean, "category_search", obtained_auth_token)
     # Define all the queries to run
     queries = [
-        ("Riyadh", "@BMW@"),
+        ("Jeddah", "auto_parts_store"),
     ]
-    search_type = "keyword_search"
+    search_type = "category_search"
     
     # Create tasks for all queries
     tasks = []

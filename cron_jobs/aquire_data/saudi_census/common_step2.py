@@ -189,6 +189,7 @@ def process_json_files(
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
 
+
 def make_json_serializable(obj):
     """Convert numpy types and other non-serializable objects to JSON-compatible types."""
     if isinstance(obj, np.integer):
@@ -202,23 +203,27 @@ def make_json_serializable(obj):
     elif isinstance(obj, (list, tuple)):
         return [make_json_serializable(item) for item in obj]
     elif isinstance(obj, dict):
-        return {key: make_json_serializable(value) for key, value in obj.items()}
+        return {
+            key: make_json_serializable(value) for key, value in obj.items()
+        }
     else:
         return obj
+
 
 def clean_feature_properties(feature):
     """Clean feature properties to ensure JSON serialization."""
     cleaned_feature = feature.copy()
-    
+
     # Clean properties
     if "properties" in cleaned_feature:
         cleaned_props = {}
         for key, value in cleaned_feature["properties"].items():
             cleaned_props[key] = make_json_serializable(value)
         cleaned_feature["properties"] = cleaned_props
-    
+
     return cleaned_feature
-    
+
+
 # City bounding boxes (50km square around each city center)
 CITY_BOUNDING_BOXES = {
     "Riyadh": {
@@ -306,245 +311,274 @@ def identify_urban_population_centers(
 ):
     """
     Identify population centers focusing on urban density patterns.
-
-    Key changes:
-    1. Much smaller minimum distance (3km instead of 8km)
-    2. Higher density thresholds (only consider truly dense areas)
-    3. Variable number of centers (don't force 4 if only 2 dense areas exist)
-    4. Urban-focused: prioritize density over geographic spread
+    Returns Point geometries instead of Polygons.
     """
-    print("\n=== URBAN POPULATION CENTER IDENTIFICATION ===")
-    print(f"Input: {len(features)} features, max_centers={max_centers}, min_distance_km={min_distance_km}")
-    
+    print(f"\n=== URBAN POPULATION CENTER IDENTIFICATION ===")
+    print(
+        f"Input: {len(features)} features, max_centers={max_centers}, min_distance_km={min_distance_km}"
+    )
+
     if len(features) == 0:
         return []
-    
-    # Step 1: Extract and validate data (same as before)
+
+    # ... (all the same logic for finding centers) ...
+
+    # Step 1-5: Same as before (finding valid features, clustering, etc.)
     valid_features = []
     for i, feature in enumerate(features):
         props = feature.get("properties", {})
-        
+
         centroid_lat = props.get("calculated_latitude")
         centroid_lon = props.get("calculated_longitude")
-        
+
         if centroid_lat is None or centroid_lon is None:
-            centroid_lat, centroid_lon = extract_coordinates_from_geometry(feature)
-        
+            centroid_lat, centroid_lon = extract_coordinates_from_geometry(
+                feature
+            )
+
         if centroid_lat is None or centroid_lon is None:
             continue
-        
+
         population_count = props.get("Population_Count", 0)
         population_density = props.get("Population_Density_KM2", 0)
-        
+
         try:
             lat_float = float(centroid_lat)
             lon_float = float(centroid_lon)
             pop_float = float(population_count) if population_count else 0
-            density_float = float(population_density) if population_density else 0
+            density_float = (
+                float(population_density) if population_density else 0
+            )
         except (ValueError, TypeError):
             continue
-        
+
         if pop_float <= 10 or density_float <= 100:
             continue
-            
+
         urban_score = density_float * (1 + np.log(1 + pop_float))
-        
-        valid_features.append({
-            'feature': feature,
-            'index': int(i),  # Ensure it's a Python int
-            'lon': float(lon_float),
-            'lat': float(lat_float),
-            'population': float(pop_float),
-            'density': float(density_float),
-            'urban_score': float(urban_score)
-        })
-    
+
+        valid_features.append(
+            {
+                "feature": feature,
+                "index": int(i),
+                "lon": float(lon_float),
+                "lat": float(lat_float),
+                "population": float(pop_float),
+                "density": float(density_float),
+                "urban_score": float(urban_score),
+            }
+        )
+
     print(f"Valid urban features: {len(valid_features)}")
-    
+
     if len(valid_features) == 0:
         return []
-    
-    # Continue with same logic but ensure all values are Python types...
-    densities = [f['density'] for f in valid_features]
+
+    # Steps 2-5: Same clustering logic as before...
+    densities = [f["density"] for f in valid_features]
     high_density_threshold = float(np.percentile(densities, 85))
-    
-    print(f"High density threshold (85th percentile): {high_density_threshold:.0f}")
-    
+
     high_density_candidates = [
-        f for f in valid_features 
-        if f['density'] >= high_density_threshold
+        f for f in valid_features if f["density"] >= high_density_threshold
     ]
-    
-    print(f"High density candidates: {len(high_density_candidates)}")
-    
+
     if len(high_density_candidates) < max_centers:
         moderate_density_threshold = float(np.percentile(densities, 70))
         high_density_candidates = [
-            f for f in valid_features 
-            if f['density'] >= moderate_density_threshold
+            f
+            for f in valid_features
+            if f["density"] >= moderate_density_threshold
         ]
-        print(f"Lowered threshold to 70th percentile: {moderate_density_threshold:.0f}")
-        print(f"Moderate+ density candidates: {len(high_density_candidates)}")
-    
+
     if len(high_density_candidates) == 0:
         high_density_candidates = valid_features
-    
-    # DBSCAN clustering (same logic but clean the results)
+
+    # DBSCAN clustering (same logic)
     if len(high_density_candidates) > 1:
-        coords = np.array([[f['lat'], f['lon']] for f in high_density_candidates])
-        
+        coords = np.array(
+            [[f["lat"], f["lon"]] for f in high_density_candidates]
+        )
+
         from sklearn.cluster import DBSCAN
+
         dbscan = DBSCAN(eps=0.02, min_samples=3)
         cluster_labels = dbscan.fit_predict(coords)
-        
-        print(f"DBSCAN found {len(set(cluster_labels))} clusters (including noise=-1)")
-        
+
         clusters = {}
         for i, label in enumerate(cluster_labels):
-            label_int = int(label)  # Convert to Python int
+            label_int = int(label)
             if label_int not in clusters:
                 clusters[label_int] = []
             clusters[label_int].append(high_density_candidates[i])
-        
+
         cluster_centers = []
         for cluster_id, cluster_members in clusters.items():
             if cluster_id == -1:
                 continue
-                
-            best_in_cluster = max(cluster_members, key=lambda x: x['urban_score'])
-            best_in_cluster['cluster_id'] = int(cluster_id)
-            best_in_cluster['cluster_size'] = len(cluster_members)
+
+            best_in_cluster = max(
+                cluster_members, key=lambda x: x["urban_score"]
+            )
+            best_in_cluster["cluster_id"] = int(cluster_id)
+            best_in_cluster["cluster_size"] = len(cluster_members)
             cluster_centers.append(best_in_cluster)
-            
-            cluster_avg_density = float(np.mean([m['density'] for m in cluster_members]))
-            print(f"  Cluster {cluster_id}: {len(cluster_members)} members, "
-                  f"avg density {cluster_avg_density:.0f}")
-        
-        # Handle noise points
+
+        # Handle noise points (same logic)
         noise_points = clusters.get(-1, [])
         if len(cluster_centers) < max_centers and noise_points:
-            noise_points.sort(key=lambda x: x['urban_score'], reverse=True)
+            noise_points.sort(key=lambda x: x["urban_score"], reverse=True)
             needed = max_centers - len(cluster_centers)
-            
+
             for noise_point in noise_points[:needed]:
-                noise_coord = (noise_point['lat'], noise_point['lon'])
+                noise_coord = (noise_point["lat"], noise_point["lon"])
                 too_close = False
-                
+
                 for center in cluster_centers:
-                    center_coord = (center['lat'], center['lon'])
-                    if geodesic(noise_coord, center_coord).kilometers < min_distance_km:
+                    center_coord = (center["lat"], center["lon"])
+                    if (
+                        geodesic(noise_coord, center_coord).kilometers
+                        < min_distance_km
+                    ):
                         too_close = True
                         break
-                
+
                 if not too_close:
-                    noise_point['cluster_id'] = 'isolated'
-                    noise_point['cluster_size'] = 1
+                    noise_point["cluster_id"] = "isolated"
+                    noise_point["cluster_size"] = 1
                     cluster_centers.append(noise_point)
-        
+
         final_centers = cluster_centers[:max_centers]
-        
+
     else:
-        # Fallback method
-        sorted_candidates = sorted(high_density_candidates, key=lambda x: x['urban_score'], reverse=True)
-        
+        # Fallback method (same logic)
+        sorted_candidates = sorted(
+            high_density_candidates,
+            key=lambda x: x["urban_score"],
+            reverse=True,
+        )
+
         final_centers = []
         for candidate in sorted_candidates:
             if len(final_centers) >= max_centers:
                 break
-                
-            candidate_coord = (candidate['lat'], candidate['lon'])
+
+            candidate_coord = (candidate["lat"], candidate["lon"])
             too_close = False
-            
+
             for center in final_centers:
-                center_coord = (center['lat'], center['lon'])
-                if geodesic(candidate_coord, center_coord).kilometers < min_distance_km:
+                center_coord = (center["lat"], center["lon"])
+                if (
+                    geodesic(candidate_coord, center_coord).kilometers
+                    < min_distance_km
+                ):
                     too_close = True
                     break
-            
+
             if not too_close:
-                candidate['cluster_id'] = len(final_centers)
-                candidate['cluster_size'] = 1
+                candidate["cluster_id"] = len(final_centers)
+                candidate["cluster_size"] = 1
                 final_centers.append(candidate)
-    
-    # Step 6: Clean and create result features
+
+    # Step 6: Create POINT features instead of keeping polygon geometry
     result_features = []
     for i, center in enumerate(final_centers):
-        feature = center['feature'].copy()
-        props = feature['properties']
-        
-        # Ensure all values are JSON-serializable Python types
-        props['calculated_latitude'] = float(center['lat'])
-        props['calculated_longitude'] = float(center['lon'])
-        props['population_center_rank'] = int(i + 1)
-        props['urban_score'] = round(float(center['urban_score']), 2)
-        props['cluster_id'] = center.get('cluster_id', int(i))
-        props['cluster_size'] = int(center.get('cluster_size', 1))
-        props['is_population_center'] = True
-        props['selection_method'] = 'urban_density_clustering'
-        
-        # Clean the entire feature
-        cleaned_feature = clean_feature_properties(feature)
+        # Get original properties from the source feature
+        original_props = center["feature"].get("properties", {}).copy()
+
+        # Add/update properties with center-specific data
+        original_props["calculated_latitude"] = float(center["lat"])
+        original_props["calculated_longitude"] = float(center["lon"])
+        original_props["population_center_rank"] = int(i + 1)
+        original_props["urban_score"] = round(float(center["urban_score"]), 2)
+        original_props["cluster_id"] = center.get("cluster_id", int(i))
+        original_props["cluster_size"] = int(center.get("cluster_size", 1))
+        original_props["is_population_center"] = True
+        original_props["selection_method"] = "urban_density_clustering"
+
+        # Create new Point feature
+        point_feature = {
+            "type": "Feature",
+            "id": original_props.get("Main_ID", f"center_{i}"),
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    float(center["lon"]),
+                    float(center["lat"]),
+                ],  # [longitude, latitude]
+            },
+            "properties": original_props,
+        }
+
+        # Clean the feature for JSON serialization
+        cleaned_feature = clean_feature_properties(point_feature)
         result_features.append(cleaned_feature)
-        
-        print(f"  Final center {i+1}: ({center['lat']:.4f}, {center['lon']:.4f}) "
-              f"pop={center['population']:.0f}, density={center['density']:.0f}")
-    
-    print(f"Selected {len(result_features)} urban population centers")
+
+        print(
+            f"  Final center {i+1}: Point({center['lon']:.4f}, {center['lat']:.4f}) "
+            f"pop={center['population']:.0f}, density={center['density']:.0f}"
+        )
+
+    print(
+        f"Selected {len(result_features)} urban population centers as Point geometries"
+    )
     return result_features
+
 
 def create_population_centers_geojson_urban(folder_path):
     """Urban-focused population center identification with robust file writing."""
     print("Starting URBAN-FOCUSED population centers identification...")
-    
+
     for root, dirs, files in os.walk(folder_path):
         for dir_name in dirs:
-            if dir_name.startswith('v') and dir_name[1:].isdigit():
+            if dir_name.startswith("v") and dir_name[1:].isdigit():
                 zoom_level = dir_name
                 zoom_path = os.path.join(root, dir_name)
                 geojson_path = os.path.join(zoom_path, "all_features.geojson")
-                
+
                 if not os.path.exists(geojson_path):
                     continue
-                
+
                 print(f"\nProcessing zoom level {zoom_level}...")
-                
+
                 try:
-                    with open(geojson_path, 'r', encoding='utf-8') as f:
+                    with open(geojson_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                    
+
                     features = data.get("features", [])
                     all_population_centers = []
                     city_stats = {}
-                    
+
                     for city_name, city_info in CITY_BOUNDING_BOXES.items():
                         print(f"  Processing {city_name}...")
-                        
+
                         city_features = filter_features_by_city_bounds(
                             features, city_info["bounds"]
                         )
-                        
-                        print(f"    Found {len(city_features)} features in {city_name}")
-                        
+
+                        print(
+                            f"    Found {len(city_features)} features in {city_name}"
+                        )
+
                         if len(city_features) == 0:
                             city_stats[city_name] = {"centers": 0}
                             continue
-                        
+
                         centers = identify_urban_population_centers(
-                            city_features, 
-                            max_centers=4, 
-                            min_distance_km=3
+                            city_features, max_centers=4, min_distance_km=3
                         )
-                        
+
                         # Add city metadata and ensure clean data
                         for center in centers:
                             center["properties"]["city"] = str(city_name)
                             center["properties"]["zoom_level"] = str(zoom_level)
-                        
+
                         all_population_centers.extend(centers)
                         city_stats[city_name] = {"centers": len(centers)}
-                        
-                        print(f"    Selected {len(centers)} urban centers for {city_name}")
-                    
+
+                        print(
+                            f"    Selected {len(centers)} urban centers for {city_name}"
+                        )
+
                     # Create output data with clean, JSON-serializable values
                     output_data = {
                         "type": "FeatureCollection",
@@ -556,48 +590,70 @@ def create_population_centers_geojson_urban(folder_path):
                             "clustering_method": "DBSCAN",
                             "focus": "urban_core_over_geographic_distribution",
                             "total_centers": len(all_population_centers),
-                            "city_statistics": city_stats
+                            "city_statistics": city_stats,
                         },
-                        "features": all_population_centers
+                        "features": all_population_centers,
                     }
-                    
+
                     # Clean the entire output data
                     clean_output_data = make_json_serializable(output_data)
-                    
+
                     # Save with error handling
-                    output_path = os.path.join(zoom_path, "population_centers.geojson")
-                    
+                    output_path = os.path.join(
+                        zoom_path, "population_centers.geojson"
+                    )
+
                     try:
-                        with open(output_path, 'w', encoding='utf-8') as f:
-                            json.dump(clean_output_data, f, ensure_ascii=False, indent=2)
-                        
-                        print(f"  Successfully created {output_path} with {len(all_population_centers)} urban centers")
-                        
+                        with open(output_path, "w", encoding="utf-8") as f:
+                            json.dump(
+                                clean_output_data,
+                                f,
+                                ensure_ascii=False,
+                                indent=2,
+                            )
+
+                        print(
+                            f"  Successfully created {output_path} with {len(all_population_centers)} urban centers"
+                        )
+
                         # Verify the file was written completely
-                        with open(output_path, 'r', encoding='utf-8') as f:
+                        with open(output_path, "r", encoding="utf-8") as f:
                             verification = json.load(f)
-                            if len(verification.get("features", [])) == len(all_population_centers):
-                                print(f"  File verification successful: {len(verification['features'])} features written")
+                            if len(verification.get("features", [])) == len(
+                                all_population_centers
+                            ):
+                                print(
+                                    f"  File verification successful: {len(verification['features'])} features written"
+                                )
                             else:
                                 print(f"  WARNING: File verification failed!")
-                                
+
                     except Exception as write_error:
-                        print(f"  ERROR writing file {output_path}: {write_error}")
-                        
+                        print(
+                            f"  ERROR writing file {output_path}: {write_error}"
+                        )
+
                         # Try writing a simpler version for debugging
                         debug_output = {
                             "type": "FeatureCollection",
-                            "features": all_population_centers[:1],  # Just first feature
-                            "debug": "partial_write_test"
+                            "features": all_population_centers[
+                                :1
+                            ],  # Just first feature
+                            "debug": "partial_write_test",
                         }
-                        debug_path = os.path.join(zoom_path, "debug_centers.geojson")
-                        with open(debug_path, 'w', encoding='utf-8') as f:
-                            json.dump(make_json_serializable(debug_output), f, indent=2)
+                        debug_path = os.path.join(
+                            zoom_path, "debug_centers.geojson"
+                        )
+                        with open(debug_path, "w", encoding="utf-8") as f:
+                            json.dump(
+                                make_json_serializable(debug_output),
+                                f,
+                                indent=2,
+                            )
                         print(f"  Created debug file: {debug_path}")
-                
+
                 except Exception as e:
                     print(f"Error processing {zoom_level}: {e}")
                     import traceback
-                    traceback.print_exc()
 
-                    
+                    traceback.print_exc()
