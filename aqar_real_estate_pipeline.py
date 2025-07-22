@@ -45,12 +45,8 @@ def run_step(step_name, script_path):
         result = subprocess.run(
             [sys.executable, script_path],
             check=True,
-            text=True,
-            capture_output=True
+            text=True
         )
-        logging.info(f"Output: {result.stdout}")
-        if result.stderr:
-            logging.warning(f"Stderr: {result.stderr}")
         logging.info(f"SUCCESS: {step_name} completed")
         return True
     except subprocess.CalledProcessError as e:
