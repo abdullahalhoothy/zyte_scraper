@@ -39,6 +39,7 @@ jobs:
           cd /zyte_scraper
           
           # Pull latest code including the Aqar real estate pipeline
+          git stash
           git pull
           
           # Make the pipeline executable (if needed)
