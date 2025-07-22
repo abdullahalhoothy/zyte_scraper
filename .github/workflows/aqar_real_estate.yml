@@ -97,9 +97,9 @@ jobs:
           echo "Starting pipeline in background..."
           nohup python aqar_real_estate_pipeline.py > pipeline.log 2>&1 &
 
-          # Show the last lines of the log for 10 seconds
-          echo "Showing pipeline log output for 10 seconds..."
-          timeout 10 tail -f pipeline.log
+          # Show the last lines of the log for 100 seconds
+          echo "Showing pipeline log output for 100 seconds..."
+          timeout 100 tail -f pipeline.log
 
           echo "Pipeline started. Check pipeline.log for full output."
 
