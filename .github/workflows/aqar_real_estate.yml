@@ -93,8 +93,15 @@ jobs:
           fi
           
           # Execute the Aqar real estate pipeline
-          echo "Running pipeline..."
-          python aqar_real_estate_pipeline.py
-          
+          # Execute the Aqar real estate pipeline in the background
+          echo "Starting pipeline in background..."
+          nohup python aqar_real_estate_pipeline.py > pipeline.log 2>&1 &
+
+          # Show the last lines of the log for 10 seconds
+          echo "Showing pipeline log output for 10 seconds..."
+          timeout 10 tail -f pipeline.log
+
+          echo "Pipeline started. Check pipeline.log for full output."
+
           # Deactivate virtual environment
           deactivate
