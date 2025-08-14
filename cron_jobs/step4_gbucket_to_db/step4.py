@@ -7,7 +7,7 @@ import os
 import json
 import sys
 from io import StringIO
-
+from geojsongcp2postgis import run_geojson_gcp_to_db
 module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(module_dir)
 from common_methods import GCPBucketManager
@@ -450,4 +450,5 @@ def process_all_pipelines():
             continue
 
 
-process_all_pipelines()
+# process_all_pipelines()
+run_geojson_gcp_to_db()
