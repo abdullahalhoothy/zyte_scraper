@@ -450,5 +450,5 @@ def process_all_pipelines():
             continue
 
 
-# process_all_pipelines()
+process_all_pipelines()
 run_geojson_gcp_to_db()
