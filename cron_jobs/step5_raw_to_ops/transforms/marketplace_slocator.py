@@ -30,15 +30,11 @@ def saudi_real_estate():
     -- Truncate the table to ensure clean data
     TRUNCATE TABLE schema_marketplace.saudi_real_estate;
 
-    -- Insert from deduplicated table if it exists, otherwise from raw table
+    -- Insert from aqar_real_estate_historic table where is_current=true
     INSERT INTO schema_marketplace.saudi_real_estate (url, city, price, latitude, longitude, category)
     SELECT url, city, price, latitude, longitude, category
-    FROM (
-        SELECT DISTINCT ON (url)
-            url, city, price, latitude, longitude, category
-        FROM raw_schema_marketplace.saudi_real_estate
-        ORDER BY url, extraction_date DESC, extraction_timestamp DESC
-    ) deduplicated_data;
+    FROM schema_marketplace.aqar_real_estate_historic
+    WHERE is_current = true;
     """
 
 def canada_commercial_properties():
@@ -194,7 +190,7 @@ def aqar_real_estate_historic():
     -- Create schema if it doesn't exist
     CREATE SCHEMA IF NOT EXISTS schema_marketplace;
 
-    -- Create historic aqar real estate table with all columns and current flag
+    -- Create historic aqar real estate table with all columns and is_current flag
     CREATE TABLE IF NOT EXISTS schema_marketplace.aqar_real_estate_historic (
         listing_id BIGINT,  -- Extracted ID from URL (e.g., 6164188)
         url TEXT NOT NULL,  -- Keep the full URL
@@ -215,7 +211,7 @@ def aqar_real_estate_historic():
         category TEXT,
         price_description TEXT,
         data TEXT,  -- Changed to TEXT to match raw table (can convert to JSONB later if needed)
-        current BOOLEAN DEFAULT FALSE,  -- Flag to mark latest records
+        is_current BOOLEAN DEFAULT FALSE,  -- Flag to mark latest records
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         record_id SERIAL PRIMARY KEY  -- Use auto-increment ID as primary key instead
@@ -245,7 +241,7 @@ def aqar_real_estate_historic():
         category,
         price_description,
         data,
-        current,
+        is_current,
         updated_at
     )
     SELECT 
@@ -285,7 +281,7 @@ def aqar_real_estate_historic():
             ) = 1 
             THEN TRUE 
             ELSE FALSE 
-        END as current,
+        END as is_current,
         CURRENT_TIMESTAMP
     FROM raw_schema_marketplace.saudi_real_estate
     ORDER BY url, 
@@ -295,8 +291,3 @@ def aqar_real_estate_historic():
              END DESC, 
              COALESCE(extraction_timestamp, 0) DESC;
     """
-
-
-# def create_lat_lng_categories_all():
-#     # get max and min lat lng of my current 6 tables
-#     pass
