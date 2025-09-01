@@ -17,7 +17,7 @@ def saudi_real_estate():
     -- Create schema if it doesn't exist
     CREATE SCHEMA IF NOT EXISTS schema_marketplace;
 
-    -- Create table if it doesn't exist
+    -- Create table if it doesn't exist (simplified version for backward compatibility)
     CREATE TABLE IF NOT EXISTS schema_marketplace.saudi_real_estate (
         url TEXT NOT NULL,
         city TEXT NULL,
@@ -30,14 +30,15 @@ def saudi_real_estate():
     -- Truncate the table to ensure clean data
     TRUNCATE TABLE schema_marketplace.saudi_real_estate;
 
-    -- Then no casting needed:
+    -- Insert from deduplicated table if it exists, otherwise from raw table
     INSERT INTO schema_marketplace.saudi_real_estate (url, city, price, latitude, longitude, category)
     SELECT url, city, price, latitude, longitude, category
-    FROM raw_schema_marketplace.saudi_real_estate
-    WHERE extraction_date = (
-        SELECT MAX(extraction_date)
+    FROM (
+        SELECT DISTINCT ON (url)
+            url, city, price, latitude, longitude, category
         FROM raw_schema_marketplace.saudi_real_estate
-    );
+        ORDER BY url, extraction_date DESC, extraction_timestamp DESC
+    ) deduplicated_data;
     """
 
 def canada_commercial_properties():
@@ -185,6 +186,114 @@ def canada_commercial_properties():
         property_type,
         city
     FROM raw_schema_marketplace.canada_commercial_properties;
+    """
+
+
+def aqar_real_estate_historic():
+    return """
+    -- Create schema if it doesn't exist
+    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
+
+    -- Create historic aqar real estate table with all columns and current flag
+    CREATE TABLE IF NOT EXISTS schema_marketplace.aqar_real_estate_historic (
+        listing_id BIGINT,  -- Extracted ID from URL (e.g., 6164188)
+        url TEXT NOT NULL,  -- Keep the full URL
+        price BIGINT,
+        latitude REAL,
+        longitude REAL,
+        category_ar TEXT,
+        category_id INTEGER,
+        city TEXT,
+        city_id INTEGER,
+        title TEXT,
+        address TEXT,
+        rent_period REAL,  -- Changed to REAL to match raw table
+        listing_created_timestamp INTEGER,  -- Changed to INTEGER to match raw table
+        extraction_timestamp INTEGER,  -- Changed to INTEGER to match raw table
+        listing_created_date TEXT,  -- Changed to TEXT to match raw table
+        extraction_date TEXT,  -- Changed to TEXT to match raw table, allow NULL
+        category TEXT,
+        price_description TEXT,
+        data TEXT,  -- Changed to TEXT to match raw table (can convert to JSONB later if needed)
+        current BOOLEAN DEFAULT FALSE,  -- Flag to mark latest records
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        record_id SERIAL PRIMARY KEY  -- Use auto-increment ID as primary key instead
+    );
+
+    -- Truncate table and insert all historic data
+    TRUNCATE TABLE schema_marketplace.aqar_real_estate_historic RESTART IDENTITY;
+
+    -- Insert all records from raw table
+    INSERT INTO schema_marketplace.aqar_real_estate_historic (
+        listing_id,
+        url,
+        price,
+        latitude,
+        longitude,
+        category_ar,
+        category_id,
+        city,
+        city_id,
+        title,
+        address,
+        rent_period,
+        listing_created_timestamp,
+        extraction_timestamp,
+        listing_created_date,
+        extraction_date,
+        category,
+        price_description,
+        data,
+        current,
+        updated_at
+    )
+    SELECT 
+        -- Extract the numeric ID from the end of the URL
+        CASE 
+            WHEN url ~ '-(\d+)$' 
+            THEN (regexp_match(url, '-(\d+)$'))[1]::BIGINT 
+            ELSE NULL 
+        END as listing_id,
+        url,
+        price,
+        latitude,
+        longitude,
+        category_ar,
+        category_id,
+        city,
+        city_id,
+        title,
+        address,
+        rent_period,
+        listing_created_timestamp,
+        extraction_timestamp,
+        listing_created_date,
+        extraction_date,
+        category,
+        price_description,
+        data,
+        CASE 
+            WHEN ROW_NUMBER() OVER (
+                PARTITION BY url 
+                ORDER BY 
+                    CASE WHEN extraction_date IS NOT NULL AND extraction_date ~ '^\d{4}-\d{2}-\d{2}$' 
+                         THEN extraction_date::DATE 
+                         ELSE '1900-01-01'::DATE  -- Default old date for NULL/invalid dates
+                    END DESC,
+                    COALESCE(extraction_timestamp, 0) DESC
+            ) = 1 
+            THEN TRUE 
+            ELSE FALSE 
+        END as current,
+        CURRENT_TIMESTAMP
+    FROM raw_schema_marketplace.saudi_real_estate
+    ORDER BY url, 
+             CASE WHEN extraction_date IS NOT NULL AND extraction_date ~ '^\d{4}-\d{2}-\d{2}$' 
+                  THEN extraction_date::DATE 
+                  ELSE '1900-01-01'::DATE 
+             END DESC, 
+             COALESCE(extraction_timestamp, 0) DESC;
     """
 
 
