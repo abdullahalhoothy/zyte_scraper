@@ -48,7 +48,8 @@ def interpolate_income(population_dir_path, zad_income_file_path, output_dir_pat
     income_centroids = income_data.geometry.centroid
     income_data = income_data.assign(geometry=income_centroids)
     
-    population_data_files = glob(os.path.join(population_dir_path, "**", "*.geojson"), recursive=True)
+    # Only look for all_features.geojson files in each version directory
+    population_data_files = glob(os.path.join(population_dir_path, "*", "all_features.geojson"))
     logger.info(f"Found {len(population_data_files)} population data files")
     
     for population_file_path in population_data_files:
