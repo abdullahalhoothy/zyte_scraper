@@ -21,7 +21,7 @@ from cron_jobs.step3_add_to_gbucket.upload_to_gbucket import (
 )
 
 
-directories = [{"zad_income_data": ["area_income_geojson"]}]
+directories = [{"zad_income_data": ["interpolated_income"]}]
 
 upload_success = upload_dev_gcp(directories)
 print(upload_success)

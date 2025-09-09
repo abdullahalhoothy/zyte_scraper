@@ -135,4 +135,4 @@ def interpolate_income(population_dir_path, zad_income_file_path, output_dir_pat
 
 interpolate_income(r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_census\population\population_json_files",
                    r"F:\git\zyte_scraper\cron_jobs\aquire_data\zad_income_data\zad_output_geo_json_files\Output_data_20250520_201024.geojson",
-                   r"F:\git\zyte_scraper\cron_jobs\aquire_data\zad_income_data\area_income_geojson")
+                   r"F:\git\zyte_scraper\cron_jobs\aquire_data\zad_income_data\interpolated_income\area_income_geojson")

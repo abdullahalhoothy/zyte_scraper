@@ -112,7 +112,7 @@ def run_geojson_gcp_to_db():
     """Run the complete import process."""
     GCP_BUCKET = "dev-s-locator"
     POPULATION_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/population/"
-    AREA_INCOME_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/interpolated_riyadh/"
+    AREA_INCOME_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/interpolated_income/"
     HOUSEHOLD_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/household/"
     HOUSING_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/housing/"
 
