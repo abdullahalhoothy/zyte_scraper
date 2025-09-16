@@ -8,4 +8,4 @@ process_real_estate_data()
 # Get the directory of the current file and construct relative path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
-process_riyadh_real_estate_traffic(csv_path, 2)
+process_riyadh_real_estate_traffic(csv_path, 50)
