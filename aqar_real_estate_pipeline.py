@@ -78,7 +78,7 @@ def main():
         # },
         {
             "name": "Step 2: Transforming Saudi real estate data to CSV",
-            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "saudi_real_estate", "step2.py")
+            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "saudi_real_estate", "step2", "step2.py")
         },
         {
             "name": "Step 3: Uploading Saudi real estate data to GCP",

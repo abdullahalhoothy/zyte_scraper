@@ -1,5 +1,5 @@
-from step2.step2_scrapy_transform_to_csv import process_real_estate_data
-from step2.step2_traffic_analysis import process_riyadh_real_estate_traffic
+from step2_scrapy_transform_to_csv import process_real_estate_data
+from step2_traffic_analysis import process_riyadh_real_estate_traffic
 
 
 
