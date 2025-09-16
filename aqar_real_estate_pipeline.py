@@ -72,10 +72,10 @@ def main():
     
     # Define Saudi real estate pipeline steps in sequence
     steps = [
-        # {
-        #     "name": "Step 1: Acquiring Saudi real estate data",
-        #     "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "saudi_real_estate", "step1_scrapy_aquire_data.py")
-        # },
+        {
+            "name": "Step 1: Acquiring Saudi real estate data",
+            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "saudi_real_estate", "step1_scrapy_aquire_data.py")
+        },
         {
             "name": "Step 2: Transforming Saudi real estate data to CSV",
             "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "saudi_real_estate", "step2", "step2.py")
