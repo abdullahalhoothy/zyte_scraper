@@ -87,14 +87,7 @@ jobs:
           # Install or update dependencies
           echo "Installing dependencies..."
           python -m pip install --upgrade pip
-          
-          # Check if requirements.txt exists
-          if [ -f "requirements.txt" ]; then
-            pip install -r requirements.txt
-          else
-            echo "Warning: requirements.txt not found. Installing essential packages..."
-            pip install scrapy google-cloud-storage psycopg2-binary selenium Pillow numpy webdriver-manager
-          fi
+          pip install -r requirements.txt
           
           # Install Chrome and ChromeDriver for traffic analysis
           echo "Installing Chrome and ChromeDriver for traffic analysis..."
@@ -121,7 +114,6 @@ jobs:
           google-chrome --version
           chromedriver --version
           
-          # Execute the Aqar real estate pipeline
           # Execute the Aqar real estate pipeline in the background
           echo "Starting pipeline in background..."
           

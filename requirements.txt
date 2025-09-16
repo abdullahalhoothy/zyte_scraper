@@ -20,18 +20,14 @@ requests
 fastapi>=0.65.2
 uvicorn>=0.14.0
 pydantic>=1.8.2
-httpx
 websockets
 geopy
-psycopg2-binary
 python-jose[cryptography]
 passlib[bcrypt]
 firebase-admin
 asyncpg
 python-multipart
 pytest
-aiofiles
-aiohttp
 stripe
 orjson
 sympy
@@ -59,5 +55,3 @@ geoalchemy2
 # Traffic Analysis Dependencies
 Pillow>=8.0.0
 opencv-python
-chromium-browser
-chromedriver-binary
