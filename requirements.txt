@@ -56,3 +56,8 @@ notebook
 jupyterlab
 python-bidi
 geoalchemy2
+# Traffic Analysis Dependencies
+Pillow>=8.0.0
+opencv-python
+chromium-browser
+chromedriver-binary

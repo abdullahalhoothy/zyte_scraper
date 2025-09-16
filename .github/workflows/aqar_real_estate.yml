@@ -45,6 +45,10 @@ jobs:
           # Make the pipeline executable (if needed)
           chmod +x aqar_real_estate_pipeline.py
           
+          # Make Chrome setup scripts executable
+          chmod +x install_chrome_cicd.py
+          chmod +x setup_chrome.py
+          
           # Install required packages
           echo "Installing required packages..."
           sudo apt-get update
@@ -89,12 +93,44 @@ jobs:
             pip install -r requirements.txt
           else
             echo "Warning: requirements.txt not found. Installing essential packages..."
-            pip install scrapy google-cloud-storage psycopg2-binary
+            pip install scrapy google-cloud-storage psycopg2-binary selenium Pillow numpy webdriver-manager
           fi
+          
+          # Install Chrome and ChromeDriver for traffic analysis
+          echo "Installing Chrome and ChromeDriver for traffic analysis..."
+          
+          # Use specialized CI/CD Chrome installation script
+          python install_chrome_cicd.py
+          
+          # Verify the installation was successful
+          if ! command -v google-chrome &> /dev/null || ! command -v chromedriver &> /dev/null; then
+            echo "❌ Chrome installation failed"
+            exit 1
+          else
+            echo "✅ Chrome installation successful"
+          fi
+          
+          # Set up virtual display for headless Chrome
+          echo "Setting up virtual display..."
+          export DISPLAY=:1
+          Xvfb :1 -screen 0 1024x768x16 &
+          sleep 2
+          
+          # Final verification
+          echo "Final verification..."
+          google-chrome --version
+          chromedriver --version
           
           # Execute the Aqar real estate pipeline
           # Execute the Aqar real estate pipeline in the background
           echo "Starting pipeline in background..."
+          
+          # Set environment variables for Chrome
+          export DISPLAY=:1
+          export CHROME_BIN=/usr/bin/google-chrome
+          export CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
+          
+          # Start pipeline with Chrome environment
           nohup python aqar_real_estate_pipeline.py > pipeline.log 2>&1 &
 
           # Show the last lines of the log for 100 seconds

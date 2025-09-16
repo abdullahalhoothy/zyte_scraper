@@ -261,8 +261,9 @@ def insert_data_into_table(conn, df, table_name, schema):
                 if df[col].dtype == 'float64':
                     df[col] = df[col].fillna(0).astype('int64')
                 
-    buffer = StringIO()
-    df.to_csv(buffer, index=False, header=False, sep="\t", na_rep="\\N")
+    # Write CSV to bytes buffer with UTF-8 encoding
+    csv_text = df.to_csv(index=False, header=False, sep="\t", na_rep="\\N")
+    buffer = BytesIO(csv_text.encode("utf-8"))
     buffer.seek(0)
     
     with conn.cursor() as cursor:
@@ -344,6 +345,20 @@ def insert_data_into_table(conn, df, table_name, schema):
                 print(f"Columns converted to BIGINT: {', '.join(columns_to_alter)}")
         except Exception as e:
             print(f"Error during copy to {schema}.{table_name}: {e}")
+            print("First row of DataFrame:")
+            print(df.iloc[0].to_dict() if not df.empty else "<DataFrame is empty>")
+            print("DataFrame dtypes:")
+            print(df.dtypes)
+            print("First 200 bytes of buffer:")
+            buffer.seek(0)
+            print(buffer.read(200))
+            # Save first 10 rows to CSV for debugging
+            debug_csv_name = f"debug_first_rows_{schema}_{table_name}.csv"
+            try:
+                df.head(10).to_csv(debug_csv_name, index=False, encoding="utf-8-sig")
+                print(f"Saved first 10 rows to {debug_csv_name}")
+            except Exception as save_err:
+                print(f"Failed to save debug CSV: {save_err}")
             raise
         
 def insert_image_metadata(conn, schema, table_name, image_data):
