@@ -1,5 +1,13 @@
 import httpx
 
+def pct_above(age, avg_median_age):
+    diff = age - avg_median_age
+    if diff <= 0:
+        return 50.0
+    pct = 50.0 - (diff * 2.5)
+    return max(pct, 0.0)
+
+
 def generate_bbox(center_lat, center_lng, radius_km=1):
     delta = radius_km / 111
     return {
@@ -9,10 +17,25 @@ def generate_bbox(center_lat, center_lng, radius_km=1):
         "top_lat": center_lat + delta,
     }
 
-async def fetch_demographics(center_lat, center_lng, radius_km=1):
+def login_and_get_user():
+    login_url = "http://37.27.195.216:8000/fastapi/login"
+    login_payload = {
+        "message": "login",
+        "request_info": {},
+        "request_body": {
+            "email": "u_je_u2008@live.com",
+            "password": "12351235"
+        }
+    }
+    with httpx.Client() as client:
+        response = client.post(login_url, json=login_payload)
+        data = response.json()
+    user_id = data.get("data", {}).get("localId")
+    id_token = data.get("data", {}).get("idToken")
+    return user_id, id_token
 
+def fetch_demographics(center_lat, center_lng, user_id, id_token, radius_km=1):
     bbox = generate_bbox(center_lat, center_lng, radius_km)
-    user_id = "JnaGDCKoSoWtj6NWEVW8MDMBCiA2"
     url = "http://37.27.195.216:8000/fastapi/fetch_population_by_viewport"
     payload = {
         "message": "fetch population",
@@ -28,19 +51,26 @@ async def fetch_demographics(center_lat, center_lng, radius_km=1):
             "income": False
         }
     }
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=payload)
+    headers = {"Authorization": f"Bearer {id_token}"} if id_token else {}
+    with httpx.Client() as client:
+        response = client.post(url, json=payload, headers=headers)
         data = response.json()
 
-    features = data.get("features", [])
-    ## Return zeros values in case of an empty dict
+    features = data.get("data", {}).get("features", [])
+    # Return zeros values in case of an empty dict
     if not features:
         return {
             "total_population": 0,
-            "avg_density": 0.0,  # Half of MAX_DENSITY from scoring
+            "avg_density": 0.0,
             "avg_median_age": 0.0,
-            "avg_income": 0.0,   # Half of MAX_INCOME from scoring
-            "percentage_age_above_35": 0.0  # Half of max age percentage
+            "avg_income": 0.0,
+            "percentage_age_above_20": 0.0,
+            "percentage_age_above_25": 0.0,
+            "percentage_age_above_30": 0.0,
+            "percentage_age_above_35": 0.0,
+            "percentage_age_above_40": 0.0,
+            "percentage_age_above_45": 0.0,
+            "percentage_age_above_50": 0.0
         }
 
     total_population = 0
@@ -60,24 +90,17 @@ async def fetch_demographics(center_lat, center_lng, radius_km=1):
         "avg_income": round((sum(income_values) / len(income_values)), 2) if income_values else 0,
     }
 
-    # Add derived percentages
+    # Add derived percentages based on median age logic
     avg_median_age = processed.get("avg_median_age", 0)
-    percentage_age_above_20 = avg_median_age - 20 + 50
-    percentage_age_above_25 = avg_median_age - 25 + 50
-    percentage_age_above_30 = avg_median_age - 30 + 50
-    percentage_age_above_35 = avg_median_age - 35 + 50
-    percentage_age_above_40 = avg_median_age - 40 + 50
-    percentage_age_above_45 = avg_median_age - 45 + 50
-    percentage_age_above_50 = avg_median_age - 50 + 50
 
     processed.update({
-        "percentage_age_above_20": percentage_age_above_20,
-        "percentage_age_above_25": percentage_age_above_25,
-        "percentage_age_above_30": percentage_age_above_30,
-        "percentage_age_above_35": percentage_age_above_35,
-        "percentage_age_above_40": percentage_age_above_40,
-        "percentage_age_above_45": percentage_age_above_45,
-        "percentage_age_above_50": percentage_age_above_50,
+        "percentage_age_above_20": pct_above(20, avg_median_age),
+        "percentage_age_above_25": pct_above(25, avg_median_age),
+        "percentage_age_above_30": pct_above(30, avg_median_age),
+        "percentage_age_above_35": pct_above(35, avg_median_age),
+        "percentage_age_above_40": pct_above(40, avg_median_age),
+        "percentage_age_above_45": pct_above(45, avg_median_age),
+        "percentage_age_above_50": pct_above(50, avg_median_age),
     })
 
     return processed

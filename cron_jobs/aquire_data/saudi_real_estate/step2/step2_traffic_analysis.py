@@ -6,8 +6,6 @@ import os
 import time
 import math
 import logging
-import json
-from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, Union
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -18,7 +16,6 @@ from selenium.webdriver.common.action_chains import ActionChains
 from PIL import Image
 import numpy as np
 from collections import Counter
-import pandas as pd
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -269,7 +266,6 @@ class GoogleMapsTrafficAnalyzer:
     def add_pin_to_image(self, image_path: str, storefront_direction: str = 'north') -> str:
         """Add a pin marker and directional cone to the center of the image for verification"""
         try:
-            from PIL import ImageDraw
 
             # Add a small delay to ensure the file is not locked
             time.sleep(0.2)
@@ -890,163 +886,5 @@ def analyze_traffic_at_location(lat: float, lng: float, cleanup_screenshots: boo
                                            target_time=target_time)
 
 
-def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
-    """
-    Process real estate CSV file to add traffic analysis for Riyadh locations
-    Preserves all data in the CSV while only adding traffic scores for Riyadh
-    Uses chunked processing to avoid loading entire CSV into memory
-    
-    Args:
-        csv_path: Path to the input CSV file
-        batch_size: Number of Riyadh locations to process before saving progress
-
-    Returns:
-        str: Path to the updated CSV file
-    """
-
-    # Generate output path for enriched CSV
-    base_path = csv_path.rsplit('.csv', 1)[0]
-    output_path = f"{base_path}_enriched_with_traffic.csv"
-    temp_path = f"{base_path}_temp_processing.csv"
-
-    logger.info("Starting traffic analysis for Riyadh locations")
-    logger.info(f"Input CSV: {csv_path}")
-    logger.info(f"Enriched Output CSV: {output_path}")
-    
-    # First pass: Count Riyadh locations and prepare output file structure
-    logger.info("First pass: Counting Riyadh locations and setting up output file...")
-    
-    riyadh_count = 0
-    total_count = 0
-    chunk_size = 5000  # Process 5k rows at a time for memory efficiency
-    first_chunk = True
-    
-    # Process CSV in chunks to create output file with traffic columns
-    for chunk_idx, chunk in enumerate(pd.read_csv(csv_path, chunksize=chunk_size)):
-        total_count += len(chunk)
-        riyadh_in_chunk = (chunk['city'] == 'الرياض').sum()
-        riyadh_count += riyadh_in_chunk
-        
-        # Add traffic columns if they don't exist
-        traffic_columns = ['traffic_score', 'traffic_details', 'traffic_analysis_date']
-        for col in traffic_columns:
-            if col not in chunk.columns:
-                chunk[col] = None
-        
-        # Write chunk to temp file (append mode after first chunk)
-        if first_chunk:
-            chunk.to_csv(temp_path, index=False, mode='w')
-            first_chunk = False
-        else:
-            chunk.to_csv(temp_path, index=False, mode='a', header=False)
-        
-        logger.info(f"Processed chunk {chunk_idx + 1}: {len(chunk)} rows, {riyadh_in_chunk} Riyadh locations")
-    
-    logger.info(f"Total records in CSV: {total_count}")
-    logger.info(f"Found {riyadh_count} Riyadh locations")
-    logger.info(f"Temporary file created: {temp_path}")
-    
-    # Second pass: Process only Riyadh locations for traffic analysis
-    logger.info("Second pass: Processing Riyadh locations for traffic analysis...")
-    
-    # Create a lookup dictionary for traffic results by coordinates
-    traffic_results = {}
-    riyadh_locations = []
-    
-    # Extract Riyadh locations that need processing
-    for chunk in pd.read_csv(temp_path, chunksize=chunk_size):
-        riyadh_chunk = chunk[chunk['city'] == 'الرياض'].copy()
-        if len(riyadh_chunk) > 0:
-            # Only process locations without existing traffic scores
-            unprocessed = riyadh_chunk[riyadh_chunk['traffic_score'].isna()]
-            for _, row in unprocessed.iterrows():
-                riyadh_locations.append({
-                    'lat': row['latitude'],
-                    'lng': row['longitude'],
-                    'index': row.name if hasattr(row, 'name') else None
-                })
-    
-    logger.info(f"Found {len(riyadh_locations)} Riyadh locations needing traffic analysis")
-    
-    if len(riyadh_locations) == 0:
-        logger.info("All Riyadh locations already have traffic data")
-        # Rename temp file to enriched output CSV
-        os.rename(temp_path, output_path)
-        logger.info(f"All data saved to: {output_path}")
-        return output_path
-    
-    # Initialize the traffic analyzer
-    analyzer = GoogleMapsTrafficAnalyzer(cleanup_driver=False)
-    processed_count = 0
-    
-    # Process Riyadh locations for traffic analysis
-    for i, location in enumerate(riyadh_locations):
-        lat = location['lat']
-        lng = location['lng']
-        
-        logger.info(f"Processing Riyadh location {i+1}/{len(riyadh_locations)}: {lat}, {lng}")
-        
-        # Analyze traffic for this location
-        traffic_result = analyzer.analyze_location_traffic(lat=lat, lng=lng)
-        
-        # Store result in lookup dictionary using coordinates as key
-        coord_key = f"{lat}_{lng}"
-        traffic_results[coord_key] = {
-            'score': traffic_result.get('score', 0),
-            'details': json.dumps(traffic_result) if traffic_result else None,
-            'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        
-        processed_count += 1
-        logger.info(f"Successfully analyzed location {i+1}: Score = {traffic_result.get('score', 0)}")
-        
-        # Save progress progressively by updating the temp file with current results
-        if processed_count % batch_size == 0 or i == len(riyadh_locations) - 1:
-            logger.info(f"Progress checkpoint: {processed_count}/{len(riyadh_locations)} locations processed")
-            logger.info("Updating CSV with current batch of traffic results...")
-            
-            # Update the temp file with current traffic results
-            temp_updated_path = f"{temp_path}_updating"
-            first_chunk_update = True
-            updated_in_batch = 0
-            
-            for chunk_idx, chunk in enumerate(pd.read_csv(temp_path, chunksize=chunk_size)):
-                # Update Riyadh locations with traffic results for this chunk
-                riyadh_mask = chunk['city'] == 'الرياض'
-                
-                for idx in chunk[riyadh_mask].index:
-                    chunk_lat = chunk.loc[idx, 'latitude']
-                    chunk_lng = chunk.loc[idx, 'longitude']
-                    coord_key = f"{chunk_lat}_{chunk_lng}"
-                    
-                    if coord_key in traffic_results:
-                        chunk.loc[idx, 'traffic_score'] = traffic_results[coord_key]['score']
-                        chunk.loc[idx, 'traffic_details'] = traffic_results[coord_key]['details']
-                        chunk.loc[idx, 'traffic_analysis_date'] = traffic_results[coord_key]['date']
-                        updated_in_batch += 1
-                
-                # Write updated chunk to temporary update file
-                if first_chunk_update:
-                    chunk.to_csv(temp_updated_path, index=False, mode='w')
-                    first_chunk_update = False
-                else:
-                    chunk.to_csv(temp_updated_path, index=False, mode='a', header=False)
-            
-            # Replace the original temp file with the updated one
-            os.replace(temp_updated_path, temp_path)
-            logger.info(f"Batch progress saved: {updated_in_batch} records updated in CSV")
-
-    # Cleanup Web Driver
-    analyzer.cleanup_webdriver()
-    logger.info("cleanup web driver...")
-
-    # Final step: Rename temp file to enriched output CSV
-    logger.info("Finalizing enriched output file...")
-    os.rename(temp_path, output_path)
-
-    logger.info(f"Traffic analysis completed: {processed_count} locations processed")
-    logger.info(f"Enriched CSV with all data saved to: {output_path}")
-
-    return output_path
 
 
