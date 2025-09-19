@@ -22,7 +22,9 @@ def filter_and_save_riyadh_records(csv_path, output_path, chunk_size=5000):
             riyadh_chunk.to_csv(output_path, index=False, mode="w")
             first_chunk = False
         else:
-            riyadh_chunk.to_csv(output_path, index=False, mode="a", header=False)
+            riyadh_chunk.to_csv(
+                output_path, index=False, mode="a", header=False
+            )
     logger.info(f"Riyadh records saved to: {output_path}")
 
 
@@ -34,7 +36,9 @@ def add_columns_to_csv(csv_path, columns, temp_path, chunk_size=5000):
     input_columns = ["url", "latitude", "longitude", "city"]
     all_columns = input_columns + columns
     first_chunk = True
-    for chunk_idx, chunk in enumerate(pd.read_csv(csv_path, chunksize=chunk_size)):
+    for chunk_idx, chunk in enumerate(
+        pd.read_csv(csv_path, chunksize=chunk_size)
+    ):
         # Only keep input columns
         chunk = chunk[input_columns]
         for col in columns:
@@ -90,7 +94,9 @@ def update_csv_with_results(
     # Only keep minimal input columns plus new columns
     input_columns = ["url", "latitude", "longitude", "city"]
     all_columns = input_columns + columns
-    for chunk_idx, chunk in enumerate(pd.read_csv(temp_path, chunksize=chunk_size)):
+    for chunk_idx, chunk in enumerate(
+        pd.read_csv(temp_path, chunksize=chunk_size)
+    ):
         # Ensure object dtype for relevant columns
         for col in object_columns:
             if col in chunk.columns:
@@ -126,7 +132,11 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
     output_path = f"{base_path}_riyadh_enriched_with_traffic.csv"
     temp_path = f"{base_path}_riyadh_temp_processing.csv"
     chunk_size = 5000
-    traffic_columns = ["traffic_score", "traffic_details", "traffic_analysis_date"]
+    traffic_columns = [
+        "traffic_score",
+        "traffic_details",
+        "traffic_analysis_date",
+    ]
 
     # ...existing code...
     logger.info("Starting traffic analysis for Riyadh locations")
@@ -134,7 +144,9 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
     logger.info(f"Enriched Output CSV: {output_path}")
 
     add_columns_to_csv(riyadh_csv_path, traffic_columns, temp_path, chunk_size)
-    riyadh_locations = get_riyadh_locations(temp_path, "traffic_score", chunk_size)
+    riyadh_locations = get_riyadh_locations(
+        temp_path, "traffic_score", chunk_size
+    )
     logger.info(
         f"Found {len(riyadh_locations)} Riyadh locations needing traffic analysis"
     )
@@ -153,12 +165,18 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
         logger.info(
             f"Processing Riyadh location {i+1}/{len(riyadh_locations)}: {lat}, {lng}"
         )
-        traffic_result = analyzer.analyze_location_traffic(lat=lat, lng=lng)
+        traffic_result = analyzer.analyze_location_traffic(
+            lat=lat, lng=lng, day_of_week="Monday", target_time="6:00PM"
+        )
         coord_key = f"{lat}_{lng}"
         traffic_results[coord_key] = {
             "traffic_score": traffic_result.get("score", 0),
-            "traffic_details": json.dumps(traffic_result) if traffic_result else None,
-            "traffic_analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "traffic_details": (
+                json.dumps(traffic_result) if traffic_result else None
+            ),
+            "traffic_analysis_date": datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
         }
         processed_count += 1
         if processed_count % batch_size == 0 or i == len(riyadh_locations) - 1:
@@ -166,7 +184,11 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
                 f"Progress checkpoint: {processed_count}/{len(riyadh_locations)} locations processed"
             )
             update_csv_with_results(
-                temp_path, traffic_results, traffic_columns, "الرياض", chunk_size
+                temp_path,
+                traffic_results,
+                traffic_columns,
+                "الرياض",
+                chunk_size,
             )
             logger.info(
                 f"Batch progress saved: {processed_count} records updated in CSV"
@@ -176,12 +198,16 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
     logger.info("cleanup web driver...")
     logger.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logger.info(f"Traffic analysis completed: {processed_count} locations processed")
+    logger.info(
+        f"Traffic analysis completed: {processed_count} locations processed"
+    )
     logger.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
 
-def process_riyadh_real_estate_demographics(csv_path: str, batch_size: int) -> str:
+def process_riyadh_real_estate_demographics(
+    csv_path: str, batch_size: int
+) -> str:
     """
     Process only Riyadh records for demographic analysis and save to a dedicated CSV.
     """
@@ -210,8 +236,12 @@ def process_riyadh_real_estate_demographics(csv_path: str, batch_size: int) -> s
     logger.info(f"Input CSV: {riyadh_csv_path}")
     logger.info(f"Enriched Output CSV: {output_path}")
 
-    add_columns_to_csv(riyadh_csv_path, demographic_columns, temp_path, chunk_size)
-    riyadh_locations = get_riyadh_locations(temp_path, "total_population", chunk_size)
+    add_columns_to_csv(
+        riyadh_csv_path, demographic_columns, temp_path, chunk_size
+    )
+    riyadh_locations = get_riyadh_locations(
+        temp_path, "total_population", chunk_size
+    )
     logger.info(
         f"Found {len(riyadh_locations)} Riyadh locations needing demographic analysis"
     )
@@ -225,13 +255,22 @@ def process_riyadh_real_estate_demographics(csv_path: str, batch_size: int) -> s
     demo_results = {}
     total_locations = len(riyadh_locations)
     from step2_add_population import login_and_get_user
+
     for batch_start in range(0, total_locations, batch_size):
-        batch = riyadh_locations[batch_start:batch_start+batch_size]
-        logger.info(f"Processing demographics for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}")
+        batch = riyadh_locations[batch_start : batch_start + batch_size]
+        logger.info(
+            f"Processing demographics for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+        )
         user_id, id_token = login_and_get_user()
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
             future_to_loc = {
-                executor.submit(fetch_demographics, loc["lat"], loc["lng"], user_id, id_token): loc
+                executor.submit(
+                    fetch_demographics,
+                    loc["lat"],
+                    loc["lng"],
+                    user_id,
+                    id_token,
+                ): loc
                 for loc in batch
             }
             for future in as_completed(future_to_loc):
@@ -241,7 +280,9 @@ def process_riyadh_real_estate_demographics(csv_path: str, batch_size: int) -> s
                 demo_results[f"{lat}_{lng}"] = {
                     **demo_result,
                     "demographics_details": json.dumps(demo_result),
-                    "demographics_analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "demographics_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
                 }
                 processed_count += 1
         logger.info(
@@ -267,7 +308,9 @@ def ensure_riyadh_csv(csv_path, chunk_size=5000):
     riyadh_csv_path = f"{base_path}_riyadh.csv"
     need_create = True
     if os.path.exists(riyadh_csv_path):
-        last_modified = datetime.fromtimestamp(os.path.getmtime(riyadh_csv_path))
+        last_modified = datetime.fromtimestamp(
+            os.path.getmtime(riyadh_csv_path)
+        )
         now = datetime.now()
         if (now - last_modified).days < 1:
             need_create = False
@@ -286,5 +329,5 @@ chunk_size = 5000
 # Ensure Riyadh CSV is created/updated if needed
 ensure_riyadh_csv(csv_path, chunk_size)
 # Example usage:
-# process_riyadh_real_estate_traffic(csv_path, 5)
-process_riyadh_real_estate_demographics(csv_path, 10)
+process_riyadh_real_estate_traffic(csv_path, 10)
+# process_riyadh_real_estate_demographics(csv_path, 10)

@@ -220,17 +220,16 @@ class GoogleMapsTrafficAnalyzer:
                 logger.info("Live traffic mode selection attempted.")
 
             # Generate screenshot path
-            if save_to_static:
-                # Create static/images/traffic_screenshots directory if it doesn't exist
-                static_dir = os.path.join("static", "images", "traffic_screenshots")
-                os.makedirs(static_dir, exist_ok=True)
+            # Save screenshots in local traffic_screenshots folder
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            screenshots_dir = os.path.join(current_dir, "traffic_screenshots")
+            os.makedirs(screenshots_dir, exist_ok=True)
 
-                # Generate unique filename with timestamp
-                timestamp = int(time.time())
-                screenshot_filename = f"traffic_{timestamp}_{lat}_{lng}.png"
-                screenshot_path = os.path.join(static_dir, screenshot_filename)
-            else:
-                screenshot_path = f"{filename}_{lat}_{lng}.png"
+            # Sanitize target_time for filename
+            safe_target_time = str(target_time).replace(":", "-").replace(" ", "_") if target_time else "no_time"
+            safe_day_of_week = str(day_of_week).replace(" ", "_") if day_of_week is not None else "no_day"
+            screenshot_filename = f"traffic_{lat}_{lng}_{safe_day_of_week}_{safe_target_time}.png"
+            screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
 
             # Take screenshot with retry logic
             screenshot_success = False
@@ -664,37 +663,42 @@ class GoogleMapsTrafficAnalyzer:
             if not analysis:
                 raise Exception("Failed to analyze traffic")
 
+            # Delete the original screenshot, keep only the pinned version
+            try:
+                if os.path.exists(screenshot_path) and screenshot_path != pinned_screenshot_path:
+                    os.remove(screenshot_path)
+                    logger.info(f"Deleted original screenshot: {screenshot_path}")
+            except Exception as cleanup_error:
+                logger.warning(f"Could not delete original screenshot: {cleanup_error}")
+
             # Calculate final score
             result = self.calculate_final_traffic_score(analysis)
+
+            # Rename pinned image to include integer storefront and area scores
+            storefront_score_int = int(result.get('storefront_score', 0))
+            area_score_int = int(result.get('area_score', 0))
+            pinned_dir, pinned_base = os.path.split(pinned_screenshot_path)
+            pinned_name, pinned_ext = os.path.splitext(pinned_base)
+            new_pinned_name = f"{pinned_name}_frontscore={storefront_score_int}_areascore={area_score_int}{pinned_ext}"
+            new_pinned_path = os.path.join(pinned_dir, new_pinned_name)
+            try:
+                os.rename(pinned_screenshot_path, new_pinned_path)
+                logger.info(f"Renamed pinned image to include storefront and area scores: {new_pinned_path}")
+                pinned_screenshot_path = new_pinned_path
+            except Exception as rename_error:
+                logger.warning(f"Could not rename pinned image: {rename_error}")
 
             # Add metadata
             result.update({
                 'method': 'google_maps_screenshot',
-                'screenshot_path': pinned_screenshot_path if not self.cleanup_screenshots or save_to_static else None,
+                'screenshot_path': pinned_screenshot_path,
                 'image_id': image_id,
                 'coordinates': {'lat': lat, 'lng': lng},
                 'analysis_timestamp': time.time(),
                 'storefront_details': analysis.get('storefront_details', {})
             })
 
-            # Cleanup screenshot files if requested and not saved to static
-            if self.cleanup_screenshots and not save_to_static:
-                try:
-                    # Add a small delay to ensure files are not locked
-                    time.sleep(0.5)
-
-                    if os.path.exists(screenshot_path):
-                        os.remove(screenshot_path)
-                        logger.info(f"Cleaned up original screenshot: {screenshot_path}")
-
-                    if os.path.exists(pinned_screenshot_path) and pinned_screenshot_path != screenshot_path:
-                        os.remove(pinned_screenshot_path)
-                        logger.info(f"Cleaned up pinned screenshot: {pinned_screenshot_path}")
-
-                except PermissionError as pe:
-                    logger.warning(f"Could not cleanup screenshot files (permission denied): {pe}")
-                except Exception as cleanup_error:
-                    logger.warning(f"Could not cleanup screenshot files: {cleanup_error}")
+            # Screenshot cleanup disabled: screenshots will not be deleted after analysis
 
             logger.info(f"Google Maps traffic analysis completed for {lat}, {lng}: Score {result['score']}")
             return result
@@ -858,33 +862,5 @@ class GoogleMapsTrafficAnalyzer:
         except Exception as e:
             logger.warning(f"Could not verify traffic loading: {e}")
             return False  # Assume not loaded if verification fails
-
-# Standalone functions for easy usage
-def analyze_traffic_at_location(lat: float, lng: float, cleanup_screenshots: bool = True,
-                              save_to_static: bool = False, storefront_direction: str = 'north', # Reintroduced parameter
-                              day_of_week: Optional[Union[str, int]] = None,
-                              target_time: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Standalone function to analyze traffic at a specific location
-
-    Args:
-        lat: Latitude of the location
-        lng: Longitude of the location
-        cleanup_screenshots: Whether to delete screenshots after analysis (ignored if save_to_static=True)
-        save_to_static: Whether to save screenshot to static folder for web access
-        storefront_direction: Direction the storefront faces (n, ne, e, se, s, sw, w, nw) # Documented
-        day_of_week: Day of week for historical traffic (e.g., 'Monday', 0-6)
-        target_time: Target Time for historical traffic ('8:30AM', '6:00PM', '10:00PM')
-
-    Returns:
-        Dict containing traffic analysis results
-    """
-    analyzer = GoogleMapsTrafficAnalyzer(cleanup_screenshots=cleanup_screenshots)
-    return analyzer.analyze_location_traffic(lat, lng, save_to_static=save_to_static,
-                                           storefront_direction=storefront_direction, # Passed to analyze_location_traffic
-                                           day_of_week=day_of_week,
-                                           target_time=target_time)
-
-
 
 

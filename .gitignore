@@ -74,3 +74,5 @@ testem.log
 *all_col_names.json*
 crawler.log
 *log*
+
+cron_jobs/aquire_data/saudi_real_estate/step2/traffic_screenshots/*
