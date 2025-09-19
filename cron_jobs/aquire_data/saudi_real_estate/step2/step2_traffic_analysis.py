@@ -43,15 +43,17 @@ class GoogleMapsTrafficAnalyzer:
         'gray': 0
     }
 
-    def __init__(self, cleanup_screenshots: bool = True):
+    def __init__(self, cleanup_screenshots: bool = True, cleanup_driver: bool = True):
         """
         Initialize the analyzer
 
         Args:
             cleanup_screenshots: Whether to delete screenshots after analysis
+            cleanup_driver: Whether to close/quit the webdriver after analysis
         """
         self.driver = None
         self.cleanup_screenshots = cleanup_screenshots
+        self.cleanup_driver = cleanup_driver
 
         # Direction mappings for storefront orientation
         self.DIRECTION_ANGLES = {
@@ -115,7 +117,7 @@ class GoogleMapsTrafficAnalyzer:
         base_url = "https://www.google.com/maps"
         # Enhanced URL with explicit traffic layer parameters
         params = f"@{lat},{lng},{zoom}z/data=!5m1!1e1"  # layer=t explicitly enables traffic
-        return f"{base_url}/{params}"
+        return f"{base_url}/{params}?hl=en&gl=us"
 
     def capture_google_maps_screenshot(self, lat: float, lng: float,
                                      filename: str = "traffic_screenshot",
@@ -141,7 +143,7 @@ class GoogleMapsTrafficAnalyzer:
             # Try to accept cookies if present
             try:
                 accept_button = WebDriverWait(self.driver, 3).until(
-                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Accept') or contains(text(), 'I agree')]"))
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Accept') or contains(., 'I agree')]"))
                 )
                 accept_button.click()
                 time.sleep(2)
@@ -348,7 +350,7 @@ class GoogleMapsTrafficAnalyzer:
     def _analyze_annular_zone(self, image_array: np.ndarray, center_x: int, center_y: int,
                               height: int, width: int, inner_radius: int, outer_radius: int,
                               zone_name: str, traffic_analysis: Dict[str, Any],
-                              excluded_pixels: Optional[Set[Tuple[int, int]]] = None):
+                              excluded_pixels: Optional[set[Tuple[int, int]]] = None):
         """
         Analyzes an annular (ring-shaped) zone for traffic colors, excluding specified pixels.
         """
@@ -393,7 +395,7 @@ class GoogleMapsTrafficAnalyzer:
 
 
     def find_storefront_traffic(self, image_array: np.ndarray, center_x: int, center_y: int,
-                                storefront_direction: str, max_distance: int = 50) -> Tuple[Dict[str, Any], Set[Tuple[int, int]]]:
+                                storefront_direction: str, max_distance: int = 50) -> Tuple[Dict[str, Any], set[Tuple[int, int]]]:
         """
         Find the closest traffic color to the center point using a cone search.
 
@@ -623,8 +625,9 @@ class GoogleMapsTrafficAnalyzer:
         """
         try:
             # Setup webdriver
-            if not self.setup_webdriver():
-                raise Exception("Failed to setup webdriver")
+            if self.cleanup_driver or not self.driver:
+                if not self.setup_webdriver():
+                    raise Exception("Failed to setup webdriver")
 
             # Capture screenshot
             screenshot_path = self.capture_google_maps_screenshot(lat, lng, save_to_static=save_to_static,
@@ -710,7 +713,8 @@ class GoogleMapsTrafficAnalyzer:
             }
 
         finally:
-            self.cleanup_webdriver()
+            if self.cleanup_driver:
+                self.cleanup_webdriver()
 
     def _ensure_traffic_layer_enabled(self):
         """Enhanced method to ensure traffic layer is enabled with multiple approaches"""
@@ -900,14 +904,14 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
         str: Path to the updated CSV file
     """
 
-    # Generate output path if not provided
+    # Generate output path for enriched CSV
     base_path = csv_path.rsplit('.csv', 1)[0]
-    output_path = f"{base_path}_with_traffic.csv"
+    output_path = f"{base_path}_enriched_with_traffic.csv"
     temp_path = f"{base_path}_temp_processing.csv"
-    
+
     logger.info("Starting traffic analysis for Riyadh locations")
     logger.info(f"Input CSV: {csv_path}")
-    logger.info(f"Output CSV: {output_path}")
+    logger.info(f"Enriched Output CSV: {output_path}")
     
     # First pass: Count Riyadh locations and prepare output file structure
     logger.info("First pass: Counting Riyadh locations and setting up output file...")
@@ -966,13 +970,13 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
     
     if len(riyadh_locations) == 0:
         logger.info("All Riyadh locations already have traffic data")
-        # Rename temp file to final output
+        # Rename temp file to enriched output CSV
         os.rename(temp_path, output_path)
         logger.info(f"All data saved to: {output_path}")
         return output_path
     
     # Initialize the traffic analyzer
-    analyzer = GoogleMapsTrafficAnalyzer()
+    analyzer = GoogleMapsTrafficAnalyzer(cleanup_driver=False)
     processed_count = 0
     
     # Process Riyadh locations for traffic analysis
@@ -1031,14 +1035,18 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
             # Replace the original temp file with the updated one
             os.replace(temp_updated_path, temp_path)
             logger.info(f"Batch progress saved: {updated_in_batch} records updated in CSV")
-    
-    # Final step: Rename temp file to final output (all updates already applied)
-    logger.info("Finalizing output file...")
+
+    # Cleanup Web Driver
+    analyzer.cleanup_webdriver()
+    logger.info("cleanup web driver...")
+
+    # Final step: Rename temp file to enriched output CSV
+    logger.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    
+
     logger.info(f"Traffic analysis completed: {processed_count} locations processed")
-    logger.info(f"Final CSV with all data saved to: {output_path}")
-    
+    logger.info(f"Enriched CSV with all data saved to: {output_path}")
+
     return output_path
 
 
