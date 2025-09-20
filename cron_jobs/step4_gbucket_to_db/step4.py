@@ -377,7 +377,7 @@ def insert_image_metadata(conn, schema, table_name, image_data):
         execute_values(cursor, insert_query, image_data)
 
 
-def list_csv_files_in_bucket(gcp):
+def list_csv_files_in_bucket(gcp, exclude_folders=[]):
     structure = {"csv": {}, "images": {}}
     blobs = list(gcp.bucket.list_blobs())
     for blob in blobs:
@@ -398,6 +398,13 @@ def list_csv_files_in_bucket(gcp):
             parts[3],
             parts[4],
         )
+
+        # skip excluded folders
+        if exclude_folders:
+            if schema_name in exclude_folders or table_name in exclude_folders:
+                print(f"Skipping excluded folder: {blob.name}")
+                continue
+
         if blob.name.endswith(".csv"):
             structure["csv"].setdefault((db_name, schema_name, table_name), []).append(
                 blob.name
@@ -422,7 +429,7 @@ def read_and_merge_csv_files(slocator_gcp, file_paths):
     return pd.concat(dataframes, ignore_index=True)
 
 
-def process_all_pipelines():
+def process_all_pipelines(exclude_folders=[]):
     """Process all pipeline configurations"""
     with open("cron_jobs/secrets_database.json", "r") as f:
         config = json.load(f)
@@ -446,7 +453,7 @@ def process_all_pipelines():
             )
 
             # Get the file structure
-            structure = list_csv_files_in_bucket(gcp_manager)
+            structure = list_csv_files_in_bucket(gcp_manager, exclude_folders)
 
             # Skip if no files found
             if not structure["csv"] and not structure["images"]:
@@ -465,5 +472,5 @@ def process_all_pipelines():
             continue
 
 
-process_all_pipelines()
+process_all_pipelines(["canada_census","household", "housing", "population", "interpolated_income", "ignore"])
 run_geojson_gcp_to_db()
