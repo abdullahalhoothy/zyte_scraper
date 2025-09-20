@@ -130,7 +130,7 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
     base_path = csv_path.rsplit(".csv", 1)[0]
     riyadh_csv_path = f"{base_path}_riyadh.csv"
     output_path = f"{base_path}_riyadh_enriched_with_traffic.csv"
-    temp_path = f"{base_path}_riyadh_temp_processing.csv"
+    temp_path = f"{base_path}__riyadh_traffic_temp_processing.csv"
     chunk_size = 5000
     traffic_columns = [
         "traffic_score",
@@ -156,51 +156,56 @@ def process_riyadh_real_estate_traffic(csv_path: str, batch_size: int) -> str:
         logger.info(f"All data saved to: {output_path}")
         return output_path
 
-    analyzer = GoogleMapsTrafficAnalyzer(cleanup_driver=False)
     processed_count = 0
     traffic_results = {}
-    for i, location in enumerate(riyadh_locations):
-        lat = location["lat"]
-        lng = location["lng"]
-        logger.info(
-            f"Processing Riyadh location {i+1}/{len(riyadh_locations)}: {lat}, {lng}"
+    total_locations = len(riyadh_locations)
+
+    for batch_start in range(0, total_locations, batch_size):
+        batch = riyadh_locations[batch_start:batch_start+batch_size]
+        logger.info(f"Processing traffic for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}")
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            future_to_loc = {
+                executor.submit(
+                    lambda loc: GoogleMapsTrafficAnalyzer(cleanup_driver=True).analyze_location_traffic(
+                        lat=loc["lat"], lng=loc["lng"], day_of_week="Monday", target_time="6:00PM"
+                    ), loc
+                ): loc for loc in batch
+            }
+            for future in as_completed(future_to_loc):
+                loc = future_to_loc[future]
+                lat, lng = loc["lat"], loc["lng"]
+                try:
+                    traffic_result = future.result()
+                except Exception as e:
+                    logger.error(f"Traffic analysis failed for {lat}, {lng}: {e}")
+                    traffic_result = {"score": 0, "error": str(e)}
+                coord_key = f"{lat}_{lng}"
+                traffic_results[coord_key] = {
+                    "traffic_score": traffic_result.get("score", 0),
+                    "traffic_details": json.dumps(traffic_result) if traffic_result else None,
+                    "traffic_analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                processed_count += 1
+        logger.info(f"Progress checkpoint: {processed_count}/{total_locations} locations processed")
+        update_csv_with_results(
+            temp_path,
+            traffic_results,
+            traffic_columns,
+            object_columns=[
+                "demographics_details",
+                "demographics_analysis_date",
+                "traffic_details",
+                "traffic_analysis_date",
+            ],
+            date_columns=["demographics_analysis_date", "traffic_analysis_date"],
+            city_filter="الرياض",
+            chunk_size=chunk_size,
         )
-        traffic_result = analyzer.analyze_location_traffic(
-            lat=lat, lng=lng, day_of_week="Monday", target_time="6:00PM"
-        )
-        coord_key = f"{lat}_{lng}"
-        traffic_results[coord_key] = {
-            "traffic_score": traffic_result.get("score", 0),
-            "traffic_details": (
-                json.dumps(traffic_result) if traffic_result else None
-            ),
-            "traffic_analysis_date": datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
-        }
-        processed_count += 1
-        if processed_count % batch_size == 0 or i == len(riyadh_locations) - 1:
-            logger.info(
-                f"Progress checkpoint: {processed_count}/{len(riyadh_locations)} locations processed"
-            )
-            update_csv_with_results(
-                temp_path,
-                traffic_results,
-                traffic_columns,
-                "الرياض",
-                chunk_size,
-            )
-            logger.info(
-                f"Batch progress saved: {processed_count} records updated in CSV"
-            )
-            traffic_results = {}  # Clear for next batch
-    analyzer.cleanup_webdriver()
-    logger.info("cleanup web driver...")
+        logger.info(f"Batch progress saved: {processed_count} records updated in CSV")
+        traffic_results = {}  # Clear for next batch
     logger.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logger.info(
-        f"Traffic analysis completed: {processed_count} locations processed"
-    )
+    logger.info(f"Traffic analysis completed: {processed_count} locations processed")
     logger.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
@@ -329,5 +334,5 @@ chunk_size = 5000
 # Ensure Riyadh CSV is created/updated if needed
 ensure_riyadh_csv(csv_path, chunk_size)
 # Example usage:
-process_riyadh_real_estate_traffic(csv_path, 10)
+process_riyadh_real_estate_traffic(csv_path, 5)
 # process_riyadh_real_estate_demographics(csv_path, 10)
