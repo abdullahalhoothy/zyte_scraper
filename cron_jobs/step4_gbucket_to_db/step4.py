@@ -167,22 +167,6 @@ def create_schema_and_table(conn, df, schema, table_name):
             else:
                 print(f"Table '{schema}.{table_name}' already exists.")
 
-            # Verify table exists
-            cursor.execute(
-                """
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = %s 
-                AND table_name = %s
-            """,
-                (schema, table_name),
-            )
-
-            if not cursor.fetchone():
-                raise Exception(
-                    f"Table {schema}.{table_name} was not created successfully"
-                )
-
     finally:
         conn.autocommit = False  # Restore autocommit to False
 
@@ -462,6 +446,7 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
 def read_and_merge_csv_files(slocator_gcp, file_paths):
     dataframes = []
     for file_path in file_paths:
+        print(f"Reading CSV file from GCP: {file_path}")
         blob = slocator_gcp.bucket.blob(file_path)
         data = blob.download_as_bytes()
         try:
