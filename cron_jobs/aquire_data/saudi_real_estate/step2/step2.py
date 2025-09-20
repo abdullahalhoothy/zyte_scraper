@@ -9,7 +9,7 @@ from step2_traffic_analysis import GoogleMapsTrafficAnalyzer, logger
 from step2_add_population import fetch_demographics
 from step2_add_population import login_and_get_user
 # --- Centralized column definitions ---
-INPUT_COLUMNS = ["url", "latitude", "longitude", "city", "direction_id"]
+INPUT_COLUMNS = ["url", "latitude", "longitude", "city", "direction_id", "category"]
 TRAFFIC_COLUMNS = [
     "traffic_score",
     "traffic_details",
@@ -49,7 +49,7 @@ def ensure_city_csv(csv_path, city=CITY_FILTER, category=CATEGORY_FILTER, column
     Returns the path to the city CSV.
     """
     base_path = csv_path.rsplit(".csv", 1)[0]
-    city_csv_path = f"{base_path}_{city}_{category}.csv"
+    city_csv_path = f"{base_path}_{city}.csv"
     need_create = True
     if os.path.exists(city_csv_path):
         last_modified = datetime.fromtimestamp(os.path.getmtime(city_csv_path))
@@ -62,8 +62,7 @@ def ensure_city_csv(csv_path, city=CITY_FILTER, category=CATEGORY_FILTER, column
         for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
             city_chunk = chunk[chunk["city"] == city].copy()
             # Filter for category
-            if "category" in city_chunk.columns:
-                city_chunk = city_chunk[city_chunk["category"] == category]
+            city_chunk = city_chunk[city_chunk["category"] == category]
             city_chunk = city_chunk[columns]
             if first_chunk:
                 city_chunk.to_csv(city_csv_path, index=False, mode="w")
