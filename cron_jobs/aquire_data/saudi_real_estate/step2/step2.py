@@ -27,11 +27,9 @@ DEMOGRAPHIC_COLUMNS = [
     "percentage_age_above_40",
     "percentage_age_above_45",
     "percentage_age_above_50",
-    "demographics_details",
     "demographics_analysis_date",
 ]
 OBJECT_COLUMNS = [
-    "demographics_details",
     "demographics_analysis_date",
     "traffic_details",
     "traffic_analysis_date",
@@ -133,6 +131,10 @@ def update_csv_with_results(temp_path, results, columns, object_columns=OBJECT_C
             if coord_key in results:
                 for col in columns:
                     value = results[coord_key].get(col, None)
+                    # Ensure only pure values are written, not dicts
+                    if isinstance(value, dict):
+                        # If the value is a dict, set to None (should not happen)
+                        value = None
                     if col in date_columns and value is not None:
                         value = str(value)
                     chunk.loc[idx, col] = value
@@ -257,7 +259,6 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
                 demo_result = future.result()
                 demo_results[f"{lat}_{lng}"] = {
                     **demo_result,
-                    "demographics_details": json.dumps(demo_result),
                     "demographics_analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }
                 processed_count += 1
@@ -279,5 +280,5 @@ csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 # Ensure city CSV is created/updated if needed
 ensure_city_csv(csv_path)
 # Example usage:
-process_city_traffic(csv_path, 10)
+# process_city_traffic(csv_path, 10)
 process_city_demographics(csv_path, 10)

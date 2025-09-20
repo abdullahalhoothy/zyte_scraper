@@ -16,9 +16,7 @@ sys.path.append(grandparent_dir)
 
 
 from cron_jobs.step3_add_to_gbucket.upload_to_gbucket import (
-    upload_dev_gcp,
-    upload_prod_gcp,
-)
+    upload_dev_gcp, upload_prod_gcp)
 
 
 directories = ["saudi_real_estate"]
