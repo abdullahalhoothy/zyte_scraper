@@ -49,7 +49,7 @@ def ensure_city_csv(csv_path, city=CITY_FILTER, category=CATEGORY_FILTER, column
     Returns the path to the city CSV.
     """
     base_path = csv_path.rsplit(".csv", 1)[0]
-    city_csv_path = f"{base_path}_{city}.csv"
+    city_csv_path = f"{base_path}_{city}_{category}.csv"
     need_create = True
     if os.path.exists(city_csv_path):
         last_modified = datetime.fromtimestamp(os.path.getmtime(city_csv_path))
