@@ -685,7 +685,8 @@ class GoogleMapsTrafficAnalyzer:
 
             # if live_traffic true, change target time in pinned name to "live"
             if live_traffic:
-                pinned_name = pinned_name.replace(f"_{target_time}", "_live").replace("no_time", "live")
+                target_time_string = target_time.replace(":","-")
+                pinned_name = pinned_name.replace(f"_{target_time_string}", "_live").replace("no_time", "live")
 
             new_pinned_name = f"{pinned_name}_frontscore={storefront_score_int}_areascore={area_score_int}{pinned_ext}"
             new_pinned_path = os.path.join(pinned_dir, new_pinned_name)
