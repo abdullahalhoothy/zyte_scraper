@@ -17,6 +17,8 @@ from PIL import Image
 import numpy as np
 from collections import Counter
 import logging
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -120,6 +122,7 @@ class GoogleMapsTrafficAnalyzer:
                                      day_of_week: Optional[Union[str, int]] = None,
                                      target_time: Optional[str] = None) -> Optional[str]:
         """Capture screenshot of Google Maps with traffic at specified location"""
+        live_traffic = True  # Default to live traffic unless typical traffic is selected
         if not self.driver:
             logger.error("Webdriver not initialized")
             return None
@@ -214,8 +217,10 @@ class GoogleMapsTrafficAnalyzer:
                         logger.info("Failed to adjust the traffic time slider.")
 
                 logger.info("Typical traffic mode selection attempted.")
+                live_traffic = False
             except Exception as e:
                 logger.info("Live traffic mode selection attempted.")
+                live_traffic = True
 
             # Generate screenshot path
             # Save screenshots in local traffic_screenshots folder
@@ -245,11 +250,11 @@ class GoogleMapsTrafficAnalyzer:
                 raise Exception("Failed to capture screenshot after 3 attempts")
 
             logger.info(f"Screenshot captured at 20m zoom level: {screenshot_path}")
-            return screenshot_path
+            return screenshot_path, live_traffic
 
         except Exception as e:
             logger.error(f"Failed to capture Google Maps screenshot: {e}")
-            return None
+            return None, live_traffic
 
     def classify_traffic_color(self, rgb: Tuple[int, int, int]) -> str:
         """Classify RGB color into traffic categories"""
@@ -623,7 +628,7 @@ class GoogleMapsTrafficAnalyzer:
                     raise Exception("Failed to setup webdriver")
 
             # Capture screenshot
-            screenshot_path = self.capture_google_maps_screenshot(lat, lng, save_to_static=save_to_static,
+            screenshot_path, live_traffic = self.capture_google_maps_screenshot(lat, lng, save_to_static=save_to_static,
                                                                   day_of_week=day_of_week, target_time=target_time)
             if not screenshot_path:
                 raise Exception("Failed to capture screenshot")
@@ -677,6 +682,11 @@ class GoogleMapsTrafficAnalyzer:
             area_score_int = int(result.get('area_score', 0))
             pinned_dir, pinned_base = os.path.split(pinned_screenshot_path)
             pinned_name, pinned_ext = os.path.splitext(pinned_base)
+
+            # if live_traffic true, change target time in pinned name to "live"
+            if live_traffic:
+                pinned_name = pinned_name.replace(f"_{target_time}", "_live").replace("no_time", "live")
+
             new_pinned_name = f"{pinned_name}_frontscore={storefront_score_int}_areascore={area_score_int}{pinned_ext}"
             new_pinned_path = os.path.join(pinned_dir, new_pinned_name)
             try:
@@ -757,8 +767,7 @@ class GoogleMapsTrafficAnalyzer:
 
             # Method 4: Use keyboard shortcut (Ctrl+Shift+T for traffic in some versions)
             try:
-                from selenium.webdriver.common.keys import Keys
-                from selenium.webdriver.common.action_chains import ActionChains
+
 
                 actions = ActionChains(self.driver)
                 actions.key_down(Keys.CONTROL).key_down(Keys.SHIFT).send_keys('t').key_up(Keys.SHIFT).key_up(Keys.CONTROL).perform()
