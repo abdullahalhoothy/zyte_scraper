@@ -36,12 +36,13 @@ OBJECT_COLUMNS = [
 ]
 DATE_COLUMNS = ["demographics_analysis_date", "traffic_analysis_date"]
 CITY_FILTER = "الرياض"
+CATEGORY_FILTER = "shop_for_rent"
 CHUNK_SIZE = 5000
 
 
 
 
-def ensure_city_csv(csv_path, city=CITY_FILTER, columns=INPUT_COLUMNS, chunk_size=CHUNK_SIZE):
+def ensure_city_csv(csv_path, city=CITY_FILTER, category=CATEGORY_FILTER, columns=INPUT_COLUMNS, chunk_size=CHUNK_SIZE):
     """
     Ensure a city-specific CSV exists and is up-to-date (created if missing or older than 1 day).
     Filters records by city and saves to a new CSV file with selected columns if needed.
@@ -60,6 +61,9 @@ def ensure_city_csv(csv_path, city=CITY_FILTER, columns=INPUT_COLUMNS, chunk_siz
         first_chunk = True
         for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
             city_chunk = chunk[chunk["city"] == city].copy()
+            # Filter for category
+            if "category" in city_chunk.columns:
+                city_chunk = city_chunk[city_chunk["category"] == category]
             city_chunk = city_chunk[columns]
             if first_chunk:
                 city_chunk.to_csv(city_csv_path, index=False, mode="w")
