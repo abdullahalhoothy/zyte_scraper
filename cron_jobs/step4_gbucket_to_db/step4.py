@@ -8,7 +8,10 @@ import json
 import sys
 from io import StringIO
 from geojsongcp2postgis import run_geojson_gcp_to_db
-module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+module_dir = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..")
+)
 sys.path.append(module_dir)
 from common_methods import GCPBucketManager
 
@@ -37,11 +40,12 @@ def ensure_database_exists(config, db_name):
                 print(f"Successfully created database {db_name}")
             finally:
                 postgres_conn.close()
-            
+
             # Now connect to the newly created database
             print(f"Connecting to newly created database {db_name}")
             return get_db_connection(config, db_name)
         raise
+
 
 def get_db_connection(db_config, db_name=None):
     """Create a database connection with optional database name override"""
@@ -49,37 +53,46 @@ def get_db_connection(db_config, db_name=None):
     if db_name:
         conn_params["dbname"] = db_name
     print(f"Attempting connection to database: {conn_params['dbname']}")
+    # Add connection timeout (default 15 seconds)
+    conn_params.setdefault("connect_timeout", 15)
     return psycopg2.connect(**conn_params)
+
 
 def process_database_structure(gcp, config, bucket_name, objects_to_create):
     connections = {}
     try:
         # Process CSV files
-        for (db_name, schema_name, table_name), file_paths in objects_to_create["csv"].items():
+        for (db_name, schema_name, table_name), file_paths in objects_to_create[
+            "csv"
+        ].items():
             if db_name not in connections:
                 # This will create the database if it doesn't exist and return a connection to it
                 connections[db_name] = ensure_database_exists(config, db_name)
 
             conn = connections[db_name]
             merged_df = read_and_merge_csv_files(gcp, file_paths)
-            
+
             # Create schema and table with autocommit
             create_schema_and_table(conn, merged_df, schema_name, table_name)
-            
+
             # Now insert data in a new transaction
             insert_data_into_table(conn, merged_df, table_name, schema_name)
             conn.commit()
             print(f"Data inserted into {db_name}.{schema_name}.{table_name}")
 
         # Process image files
-        for (db_name, schema_name, table_name), image_data in objects_to_create["images"].items():
+        for (db_name, schema_name, table_name), image_data in objects_to_create[
+            "images"
+        ].items():
             if db_name not in connections:
                 connections[db_name] = ensure_database_exists(config, db_name)
 
             conn = connections[db_name]
             insert_image_metadata(conn, schema_name, table_name, image_data)
             conn.commit()
-            print(f"Image metadata inserted into {db_name}.{schema_name}.{table_name}")
+            print(
+                f"Image metadata inserted into {db_name}.{schema_name}.{table_name}"
+            )
 
     except Exception as e:
         print(f"Error occurred: {e}")
@@ -95,6 +108,8 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
                 conn.close()
             except:
                 pass
+
+
 def create_schema_and_table(conn, df, schema, table_name):
     """Creates schema and table if they don't exist."""
     conn.autocommit = True  # Temporarily enable autocommit
@@ -172,7 +187,6 @@ def create_schema_and_table(conn, df, schema, table_name):
         conn.autocommit = False  # Restore autocommit to False
 
 
-
 def create_database_structure(conn, df, db_name, schema, table_name):
     """
     Creates database, schema, and table if they don't exist.
@@ -183,10 +197,14 @@ def create_database_structure(conn, df, db_name, schema, table_name):
     try:
         with conn.cursor() as cursor:
             # Check and create database
-            cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+            cursor.execute(
+                "SELECT 1 FROM pg_database WHERE datname = %s", (db_name,)
+            )
             if not cursor.fetchone():
                 cursor.execute(
-                    sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name))
+                    sql.SQL("CREATE DATABASE {}").format(
+                        sql.Identifier(db_name)
+                    )
                 )
                 print(f"Database '{db_name}' created successfully.")
             else:
@@ -250,22 +268,22 @@ def insert_data_into_table(conn, df, table_name, schema):
     # First, analyze DataFrame to determine which columns need BIGINT
     columns_to_alter = []
     for col in df.columns:
-        if df[col].dtype in ['int64', 'float64']:
+        if df[col].dtype in ["int64", "float64"]:
             # Check if any value exceeds PostgreSQL integer limits
             max_val = df[col].max()
             min_val = df[col].min()
             if max_val > 2147483647 or min_val < -2147483648:
                 columns_to_alter.append(col)
-                
+
                 # Convert float values to integers for BIGINT columns
-                if df[col].dtype == 'float64':
-                    df[col] = df[col].fillna(0).astype('int64')
-                
+                if df[col].dtype == "float64":
+                    df[col] = df[col].fillna(0).astype("int64")
+
     # Write CSV to bytes buffer with UTF-8 encoding
     csv_text = df.to_csv(index=False, header=False, sep="\t", na_rep="\\N")
     buffer = BytesIO(csv_text.encode("utf-8"))
     buffer.seek(0)
-    
+
     with conn.cursor() as cursor:
         try:
             # Create a temporary table
@@ -275,7 +293,7 @@ def insert_data_into_table(conn, df, table_name, schema):
                 sql.Identifier(schema), sql.Identifier(temp_table)
             )
             cursor.execute(drop_temp)
-            
+
             # CHANGED: Create temp table based on DataFrame structure instead of existing table
             columns = []
             for col in df.columns:
@@ -294,30 +312,36 @@ def insert_data_into_table(conn, df, table_name, schema):
                 sql.SQL(", ").join(columns),
             )
             cursor.execute(create_temp)
-            
+
             # Alter column types to BIGINT where needed
             for column in columns_to_alter:
-                alter_column = sql.SQL("""
+                alter_column = sql.SQL(
+                    """
                     ALTER TABLE {}.{} 
                     ALTER COLUMN {} TYPE BIGINT
-                """).format(
+                """
+                ).format(
                     sql.Identifier(schema),
                     sql.Identifier(temp_table),
-                    sql.Identifier(column)
+                    sql.Identifier(column),
                 )
                 cursor.execute(alter_column)
-            
+
             # Insert into temp table
             qualified_temp_table = sql.SQL("{}.{}").format(
                 sql.Identifier(schema), sql.Identifier(temp_table)
             )
-            columns = sql.SQL(", ").join(sql.Identifier(col) for col in df.columns)
+            columns = sql.SQL(", ").join(
+                sql.Identifier(col) for col in df.columns
+            )
             copy_cmd = sql.SQL(
                 "COPY {} ({}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')"
             ).format(qualified_temp_table, columns)
-            cursor.execute("SET client_encoding TO 'UTF8'")  # Handle special characters
+            cursor.execute(
+                "SET client_encoding TO 'UTF8'"
+            )  # Handle special characters
             cursor.copy_expert(copy_cmd, buffer)
-            
+
             # Swap tables
             old_table = f"old_{table_name}"
             rename_commands = [
@@ -340,13 +364,19 @@ def insert_data_into_table(conn, df, table_name, schema):
             ]
             for cmd in rename_commands:
                 cursor.execute(cmd)
-            print(f"Table {schema}.{table_name} replaced with {len(df)} new rows")
+            print(
+                f"Table {schema}.{table_name} replaced with {len(df)} new rows"
+            )
             if columns_to_alter:
-                print(f"Columns converted to BIGINT: {', '.join(columns_to_alter)}")
+                print(
+                    f"Columns converted to BIGINT: {', '.join(columns_to_alter)}"
+                )
         except Exception as e:
             print(f"Error during copy to {schema}.{table_name}: {e}")
             print("First row of DataFrame:")
-            print(df.iloc[0].to_dict() if not df.empty else "<DataFrame is empty>")
+            print(
+                df.iloc[0].to_dict() if not df.empty else "<DataFrame is empty>"
+            )
             print("DataFrame dtypes:")
             print(df.dtypes)
             print("First 200 bytes of buffer:")
@@ -355,12 +385,15 @@ def insert_data_into_table(conn, df, table_name, schema):
             # Save first 10 rows to CSV for debugging
             debug_csv_name = f"debug_first_rows_{schema}_{table_name}.csv"
             try:
-                df.head(10).to_csv(debug_csv_name, index=False, encoding="utf-8-sig")
+                df.head(10).to_csv(
+                    debug_csv_name, index=False, encoding="utf-8-sig"
+                )
                 print(f"Saved first 10 rows to {debug_csv_name}")
             except Exception as save_err:
                 print(f"Failed to save debug CSV: {save_err}")
             raise
-        
+
+
 def insert_image_metadata(conn, schema, table_name, image_data):
     with conn.cursor() as cursor:
         cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
@@ -387,7 +420,17 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
         if len(parts) < 5 or not (
             blob.name.endswith(".csv")
             or blob.name.split(".")[-1].lower()
-            in ["jpeg", "jpg", "png", "gif", "bmp", "tiff", "webp", "svg", "heic"]
+            in [
+                "jpeg",
+                "jpg",
+                "png",
+                "gif",
+                "bmp",
+                "tiff",
+                "webp",
+                "svg",
+                "heic",
+            ]
         ):
             print(f"Skipping file with unexpected path structure: {blob.name}")
             continue
@@ -406,9 +449,9 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
                 continue
 
         if blob.name.endswith(".csv"):
-            structure["csv"].setdefault((db_name, schema_name, table_name), []).append(
-                blob.name
-            )
+            structure["csv"].setdefault(
+                (db_name, schema_name, table_name), []
+            ).append(blob.name)
         else:
             structure["images"].setdefault(
                 (db_name, schema_name, table_name), []
@@ -422,9 +465,13 @@ def read_and_merge_csv_files(slocator_gcp, file_paths):
         blob = slocator_gcp.bucket.blob(file_path)
         data = blob.download_as_bytes()
         try:
-            df = pd.read_csv(BytesIO(data), encoding="utf-8-sig", low_memory=False) # handles both utf-8 and utf-8-sig
+            df = pd.read_csv(
+                BytesIO(data), encoding="utf-8-sig", low_memory=False
+            )  # handles both utf-8 and utf-8-sig
         except UnicodeDecodeError:
-            df = pd.read_csv(BytesIO(data), encoding="ISO-8859-1", low_memory=False)
+            df = pd.read_csv(
+                BytesIO(data), encoding="ISO-8859-1", low_memory=False
+            )
         dataframes.append(df)
     return pd.concat(dataframes, ignore_index=True)
 
@@ -437,8 +484,8 @@ def process_all_pipelines(exclude_folders=[]):
     for pipeline_name, pipeline_config in config.items():
         # Skip incomplete configurations
         if (
-            not pipeline_config["bucket"]["credentials_path"] or 
-            not pipeline_config["db"]["host"]
+            not pipeline_config["bucket"]["credentials_path"]
+            or not pipeline_config["db"]["host"]
         ):
             print(f"Skipping {pipeline_name}: Incomplete configuration")
             continue
@@ -472,5 +519,15 @@ def process_all_pipelines(exclude_folders=[]):
             continue
 
 
-process_all_pipelines(["canada_census","household", "housing", "population", "interpolated_income", "ignore"])
+process_all_pipelines(
+    [
+        "canada_census",
+        "canada_commercial_properties",
+        "household",
+        "housing",
+        "population",
+        "interpolated_income",
+        "ignore",
+    ]
+)
 run_geojson_gcp_to_db()
