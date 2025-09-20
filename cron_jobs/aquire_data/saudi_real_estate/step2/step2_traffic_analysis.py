@@ -40,16 +40,14 @@ class GoogleMapsTrafficAnalyzer:
         'gray': 0
     }
 
-    def __init__(self, cleanup_screenshots: bool = True, cleanup_driver: bool = True):
+    def __init__(self, cleanup_driver: bool = True):
         """
         Initialize the analyzer
 
         Args:
-            cleanup_screenshots: Whether to delete screenshots after analysis
             cleanup_driver: Whether to close/quit the webdriver after analysis
         """
         self.driver = None
-        self.cleanup_screenshots = cleanup_screenshots
         self.cleanup_driver = cleanup_driver
 
         # Direction mappings for storefront orientation
@@ -697,8 +695,6 @@ class GoogleMapsTrafficAnalyzer:
                 'analysis_timestamp': time.time(),
                 'storefront_details': analysis.get('storefront_details', {})
             })
-
-            # Screenshot cleanup disabled: screenshots will not be deleted after analysis
 
             logger.info(f"Google Maps traffic analysis completed for {lat}, {lng}: Score {result['score']}")
             return result
