@@ -1,6 +1,16 @@
 import os
 import pandas as pd
 from datetime import datetime
+import json
+
+def extract_direction_id(row):
+    if isinstance(row, str):
+        try:
+            data_dict = json.loads(row)
+            return data_dict.get('direction_id', None)
+        except Exception:
+            return None
+    return None
 
 category_mapping_en = {
     1: "apartment_for_rent",
@@ -38,7 +48,7 @@ rent_period_mapping = {
 def process_real_estate_data():
     print("Processing raw data...")
     file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ignore', 'raw_saudi_real_estate.csv')
-    df = pd.read_csv(file_path, usecols=lambda x: x != 'data')
+    df = pd.read_csv(file_path)
     
     if 'rent_period' not in df.columns or 'category_id' not in df.columns:
         raise ValueError("CSV must contain 'rent_period' and 'category_id' columns")
@@ -59,6 +69,10 @@ def process_real_estate_data():
     df = df.rename(columns={'category': 'category_ar'})
     df['category'] = df['category_id'].fillna(-1).astype(int).map(category_mapping_en).fillna('others')
     df['rent_period'] = pd.to_numeric(df['rent_period'], errors='coerce')
+
+    # from 'data' column extract 'direction_id' if exists and make it a column, using pandas apply and top-level function
+    df['direction_id'] = df['data'].apply(extract_direction_id)
+    
     
     # Set price_description based on category first
     for_sale_mask = df['category'].str.contains('for_sale', case=False, na=False)
