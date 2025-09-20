@@ -691,7 +691,7 @@ class GoogleMapsTrafficAnalyzer:
             new_pinned_name = f"{pinned_name}_frontscore={storefront_score_int}_areascore={area_score_int}{pinned_ext}"
             new_pinned_path = os.path.join(pinned_dir, new_pinned_name)
             try:
-                os.rename(pinned_screenshot_path, new_pinned_path)
+                os.replace(pinned_screenshot_path, new_pinned_path)
                 logger.info(f"Renamed pinned image to include storefront and area scores: {new_pinned_path}")
                 pinned_screenshot_path = new_pinned_path
             except Exception as rename_error:
