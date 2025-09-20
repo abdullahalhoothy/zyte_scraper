@@ -334,5 +334,5 @@ chunk_size = 5000
 # Ensure Riyadh CSV is created/updated if needed
 ensure_riyadh_csv(csv_path, chunk_size)
 # Example usage:
-process_riyadh_real_estate_traffic(csv_path, 5)
+process_riyadh_real_estate_traffic(csv_path, 10)
 # process_riyadh_real_estate_demographics(csv_path, 10)
