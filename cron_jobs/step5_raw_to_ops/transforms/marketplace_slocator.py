@@ -12,30 +12,7 @@ CREATE TABLE IF NOT EXISTS schema_marketplace.datasets
     """
 
 
-def saudi_real_estate():
-    return """
-    -- Create schema if it doesn't exist
-    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
 
-    -- Create table if it doesn't exist (simplified version for backward compatibility)
-    CREATE TABLE IF NOT EXISTS schema_marketplace.saudi_real_estate (
-        url TEXT NOT NULL,
-        city TEXT NULL,
-        price BIGINT NULL,  -- Keep as BIGINT
-        latitude REAL,
-        longitude REAL,
-        category TEXT
-    );
-
-    -- Truncate the table to ensure clean data
-    TRUNCATE TABLE schema_marketplace.saudi_real_estate;
-
-    -- Insert from aqar_real_estate_historic table where is_current=true
-    INSERT INTO schema_marketplace.saudi_real_estate (url, city, price, latitude, longitude, category)
-    SELECT url, city, price, latitude, longitude, category
-    FROM schema_marketplace.aqar_real_estate_historic
-    WHERE is_current = true;
-    """
 
 def canada_commercial_properties():
     return """
@@ -290,4 +267,68 @@ def aqar_real_estate_historic():
                   ELSE '1900-01-01'::DATE 
              END DESC, 
              COALESCE(extraction_timestamp, 0) DESC;
+    """
+
+
+def historic_to_saudi_real_estate():
+    return """
+    -- Create schema if it doesn't exist
+    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
+
+    -- Create table if it doesn't exist (add demographic columns)
+    CREATE TABLE IF NOT EXISTS schema_marketplace.saudi_real_estate (
+        url TEXT NOT NULL,
+        city TEXT NULL,
+        price BIGINT NULL,
+        latitude REAL,
+        longitude REAL,
+        category TEXT,
+        direction_id TEXT,
+        total_population BIGINT,
+        avg_density REAL,
+        avg_median_age REAL,
+        avg_income REAL,
+        percentage_age_above_20 REAL,
+        percentage_age_above_25 REAL,
+        percentage_age_above_30 REAL,
+        percentage_age_above_35 REAL,
+        percentage_age_above_40 REAL,
+        percentage_age_above_45 REAL,
+        percentage_age_above_50 REAL,
+        demographics_analysis_date TEXT
+    );
+
+    -- Truncate the table to ensure clean data
+    TRUNCATE TABLE schema_marketplace.saudi_real_estate;
+
+    WITH current_listings AS (
+        SELECT url, city, price, latitude, longitude, category
+        FROM schema_marketplace.aqar_real_estate_historic
+        WHERE is_current = true
+    ),
+    demo_enriched AS (
+        SELECT 
+            cl.url, cl.city, cl.price, cl.latitude, cl.longitude, cl.category,
+            red.direction_id, red.total_population, red.avg_density,
+            red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
+            red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
+            red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date
+        FROM current_listings cl
+        LEFT JOIN raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
+            ON cl.url = red.url
+    )
+    INSERT INTO schema_marketplace.saudi_real_estate (
+        url, city, price, latitude, longitude, category,
+        direction_id, total_population, avg_density, avg_median_age, avg_income,
+        percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
+        percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
+        percentage_age_above_50, demographics_analysis_date
+    )
+    SELECT 
+        url, city, price, latitude, longitude, category,
+        direction_id, total_population, avg_density, avg_median_age, avg_income,
+        percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
+        percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
+        percentage_age_above_50, demographics_analysis_date
+    FROM demo_enriched;
     """

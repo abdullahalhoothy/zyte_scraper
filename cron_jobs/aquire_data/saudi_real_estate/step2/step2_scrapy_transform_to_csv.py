@@ -72,8 +72,7 @@ def process_real_estate_data():
 
     # from 'data' column extract 'direction_id' if exists and make it a column, using pandas apply and top-level function
     df['direction_id'] = df['data'].apply(extract_direction_id)
-    
-    
+
     # Set price_description based on category first
     for_sale_mask = df['category'].str.contains('for_sale', case=False, na=False)
     df.loc[for_sale_mask, 'price_description'] = 'For Sale'
@@ -81,10 +80,12 @@ def process_real_estate_data():
     # if we have for_rent in category use rent_period_mapping
     for_rent_mask = df['category'].str.contains('for_rent', case=False, na=False)
     df.loc[for_rent_mask, 'price_description'] = df.loc[for_rent_mask, 'rent_period'].fillna(-1).astype(int).map(rent_period_mapping).fillna('For Rent')
-    
+
     # else see if we have rent_period mapping otherwise keep it empty
     df.loc[~for_sale_mask & ~for_rent_mask, 'price_description'] = df.loc[~for_sale_mask & ~for_rent_mask, 'rent_period'].fillna(-1).astype(int).map(rent_period_mapping).fillna('')
-    
+
+    df = df.drop(columns=['category_ar'])
+
     print("Data processing complete. Saving to CSV...")
     output_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'saudi_real_estate.csv')
     df.to_csv(output_path, index=False, mode='w')

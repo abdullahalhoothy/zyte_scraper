@@ -16,6 +16,7 @@ def upload_directory_to_gcp(
     """
     Upload entire directories to GCP bucket, maintaining directory structure.
     Only uploads CSV and JSON files.
+    Ignores files in directories named "ignore".
    
     Args:
         source_paths: Can be:
@@ -73,6 +74,10 @@ def upload_directory_to_gcp(
                 
             # Walk through the directory and all subdirectories
             for root, _, files in os.walk(abs_source_path):
+                if "ignore" in root.lower():
+                    print(f"Skipping ignored directory: {root}")
+                    continue
+                
                 # Get the relative path from the source directory
                 rel_path = os.path.relpath(root, os.path.dirname(abs_source_path))
                 
