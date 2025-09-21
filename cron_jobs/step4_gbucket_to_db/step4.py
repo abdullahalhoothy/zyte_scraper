@@ -447,4 +447,4 @@ process_all_pipelines(
         "interpolated_income"
     ]
 )
-# run_geojson_gcp_to_db()
+run_geojson_gcp_to_db()
