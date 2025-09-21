@@ -19,7 +19,9 @@ from collections import Counter
 import logging
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
-logging.basicConfig(level=logging.INFO)
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 logger = logging.getLogger(__name__)
 
 class GoogleMapsTrafficAnalyzer:
