@@ -171,84 +171,10 @@ def create_schema_and_table(conn, df, schema, table_name):
         conn.autocommit = False  # Restore autocommit to False
 
 
-def create_database_structure(conn, df, db_name, schema, table_name):
-    """
-    Creates database, schema, and table if they don't exist.
-    Returns True if operations were successful.
-    """
-    # First create database with autocommit
-    conn.autocommit = True
-    try:
-        with conn.cursor() as cursor:
-            # Check and create database
-            cursor.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s", (db_name,)
-            )
-            if not cursor.fetchone():
-                cursor.execute(
-                    sql.SQL("CREATE DATABASE {}").format(
-                        sql.Identifier(db_name)
-                    )
-                )
-                print(f"Database '{db_name}' created successfully.")
-            else:
-                print(f"Database '{db_name}' already exists.")
-
-            # Check if schema exists
-            cursor.execute(
-                """
-                SELECT schema_name 
-                FROM information_schema.schemata 
-                WHERE schema_name = %s
-            """,
-                (schema,),
-            )
-
-            if not cursor.fetchone():
-                cursor.execute(f'CREATE SCHEMA "{schema}"')
-                print(f"Schema '{schema}' created successfully.")
-            else:
-                print(f"Schema '{schema}' already exists.")
-
-            # Create table
-            columns = []
-            for col in df.columns:
-                dtype = (
-                    "INTEGER"
-                    if df[col].dtype == "int64"
-                    else "REAL" if df[col].dtype == "float64" else "TEXT"
-                )
-                columns.append(f'"{col}" {dtype}')
-            columns_str = ", ".join(columns)
-
-            # Check if table exists
-            cursor.execute(
-                """
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = %s 
-                AND table_name = %s
-            """,
-                (schema, table_name),
-            )
-
-            if not cursor.fetchone():
-                create_table_sql = (
-                    f'CREATE TABLE "{schema}"."{table_name}" ({columns_str})'
-                )
-                cursor.execute(create_table_sql)
-                print(f"Table '{schema}.{table_name}' created successfully.")
-            else:
-                print(f"Table '{schema}.{table_name}' already exists.")
-
-    except Exception as e:
-        print(f"Error in database structure creation: {e}")
-        raise
-    finally:
-        conn.autocommit = False
-
 
 def insert_data_into_table(conn, df, table_name, schema):
+    # add prints to this function for debugging
+    print(f"Inserting data into {schema}.{table_name}...")
     # First, analyze DataFrame to determine which columns need BIGINT
     columns_to_alter = []
     for col in df.columns:
@@ -264,12 +190,14 @@ def insert_data_into_table(conn, df, table_name, schema):
                     df[col] = df[col].fillna(0).astype("int64")
 
     # Write CSV to bytes buffer with UTF-8 encoding
+    print(f"Preparing data for COPY into {schema}.{table_name}...")
     csv_text = df.to_csv(index=False, header=False, sep="\t", na_rep="\\N")
     buffer = BytesIO(csv_text.encode("utf-8"))
     buffer.seek(0)
 
     with conn.cursor() as cursor:
         try:
+            print(f"Starting COPY to {schema}.{table_name}...")
             # Create a temporary table
             temp_table = f"temp_{table_name}"
             # Drop temp table if it exists
@@ -289,7 +217,7 @@ def insert_data_into_table(conn, df, table_name, schema):
                 columns.append(
                     sql.SQL("{} {}").format(sql.Identifier(col), sql.SQL(dtype))
                 )
-
+            print(f"Creating temporary table {schema}.{temp_table}...")
             create_temp = sql.SQL("CREATE TABLE {}.{} ({})").format(
                 sql.Identifier(schema),
                 sql.Identifier(temp_table),
@@ -299,6 +227,7 @@ def insert_data_into_table(conn, df, table_name, schema):
 
             # Alter column types to BIGINT where needed
             for column in columns_to_alter:
+                print(f"Altering column {column} to BIGINT in temp table...")
                 alter_column = sql.SQL(
                     """
                     ALTER TABLE {}.{} 
@@ -312,6 +241,7 @@ def insert_data_into_table(conn, df, table_name, schema):
                 cursor.execute(alter_column)
 
             # Insert into temp table
+            print(f"Inserting data into temporary table {schema}.{temp_table}...")
             qualified_temp_table = sql.SQL("{}.{}").format(
                 sql.Identifier(schema), sql.Identifier(temp_table)
             )
@@ -327,6 +257,7 @@ def insert_data_into_table(conn, df, table_name, schema):
             cursor.copy_expert(copy_cmd, buffer)
 
             # Swap tables
+            print(f"Swapping tables to replace {schema}.{table_name}...")
             old_table = f"old_{table_name}"
             rename_commands = [
                 sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
@@ -419,7 +350,7 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
             print(f"Skipping file with unexpected path structure: {blob.name}")
             continue
 
-        db_name, schema_name, table_name, file_name = (
+        db_name, schema_name, dir_name, dir_date = (
             parts[1],
             parts[2],
             parts[3],
@@ -428,18 +359,20 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
 
         # skip excluded folders
         if exclude_folders:
-            if schema_name in exclude_folders or table_name in exclude_folders:
+            if schema_name in exclude_folders or dir_name in exclude_folders:
                 print(f"Skipping excluded folder: {blob.name}")
                 continue
 
         if blob.name.endswith(".csv"):
+            # remove .csv extension for table name
+            table_name = parts[5].rsplit(".csv", 1)[0]
             structure["csv"].setdefault(
                 (db_name, schema_name, table_name), []
             ).append(blob.name)
-        else:
+        if blob.name.endswith(".jpeg") or blob.name.endswith(".png"):
             structure["images"].setdefault(
-                (db_name, schema_name, table_name), []
-            ).append((file_name, blob.public_url))
+                (db_name, schema_name, dir_name), []
+            ).append((dir_date, blob.public_url))
     return structure
 
 
@@ -511,8 +444,7 @@ process_all_pipelines(
         "household",
         "housing",
         "population",
-        "interpolated_income",
-        "ignore",
+        "interpolated_income"
     ]
 )
-run_geojson_gcp_to_db()
+# run_geojson_gcp_to_db()
