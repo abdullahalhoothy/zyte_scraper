@@ -79,6 +79,7 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
             create_schema_and_table(conn, first_df, schema_name, table_name)
 
             # Insert each CSV sequentially
+            CHUNK_SIZE = 5000  # Adjust chunk size as needed
             for file_path in file_paths:
                 print(
                     f"Inserting CSV file into {db_name}.{schema_name}.{table_name}: {file_path}"
@@ -86,15 +87,17 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
                 blob = gcp.bucket.blob(file_path)
                 data = blob.download_as_bytes()
                 try:
-                    df = pd.read_csv(
-                        BytesIO(data), encoding="utf-8-sig", low_memory=False
+                    chunk_iter = pd.read_csv(
+                        BytesIO(data), encoding="utf-8-sig", low_memory=False, chunksize=CHUNK_SIZE
                     )
                 except UnicodeDecodeError:
-                    df = pd.read_csv(
-                        BytesIO(data), encoding="ISO-8859-1", low_memory=False
+                    chunk_iter = pd.read_csv(
+                        BytesIO(data), encoding="ISO-8859-1", low_memory=False, chunksize=CHUNK_SIZE
                     )
-                insert_data_into_table(conn, df, table_name, schema_name)
-                conn.commit()
+                for i, chunk_df in enumerate(chunk_iter):
+                    print(f"Inserting chunk {i+1} of {file_path} into {db_name}.{schema_name}.{table_name}")
+                    insert_data_into_table(conn, chunk_df, table_name, schema_name)
+                    conn.commit()
             print(f"All CSVs inserted into {db_name}.{schema_name}.{table_name}")
 
         # Process image files
@@ -157,6 +160,7 @@ def create_schema_and_table(conn, df, schema, table_name):
                 columns.append(
                     sql.SQL("{} {}").format(sql.Identifier(col), sql.SQL(dtype))
                 )
+            print(f"Creating table '{schema}.{table_name}'...")
 
             # Build the CREATE TABLE command using SQL composition
             create_table_cmd = sql.SQL("CREATE TABLE {}.{} ({})").format(
