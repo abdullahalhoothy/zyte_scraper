@@ -1,15 +1,24 @@
-
 from datetime import datetime
 import os
 import json
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer, logger
-# from step2_scrapy_transform_to_csv import process_real_estate_data
+from step2_scrapy_transform_to_csv import process_real_estate_data
 from step2_add_population import fetch_demographics
 from step2_add_population import login_and_get_user
+from step2_extract_listing_id import add_listing_ids_to_csv
+
 # --- Centralized column definitions ---
-INPUT_COLUMNS = ["url", "latitude", "longitude", "city", "direction_id", "category"]
+INPUT_COLUMNS = [
+    "listing_id",
+    "url",
+    "latitude",
+    "longitude",
+    "city",
+    "direction_id",
+    "category",
+]
 TRAFFIC_COLUMNS = [
     "traffic_score",
     "traffic_details",
@@ -40,9 +49,13 @@ CATEGORY_FILTER = "shop_for_rent"
 CHUNK_SIZE = 5000
 
 
-
-
-def ensure_city_csv(csv_path, city=CITY_FILTER, category=CATEGORY_FILTER, columns=INPUT_COLUMNS, chunk_size=CHUNK_SIZE):
+def ensure_city_csv(
+    csv_path,
+    city=CITY_FILTER,
+    category=CATEGORY_FILTER,
+    columns=INPUT_COLUMNS,
+    chunk_size=CHUNK_SIZE,
+):
     """
     Ensure a city-specific CSV exists and is up-to-date (created if missing or older than 1 day).
     Filters records by city and saves to a new CSV file with selected columns if needed.
@@ -75,7 +88,6 @@ def ensure_city_csv(csv_path, city=CITY_FILTER, category=CATEGORY_FILTER, column
     return city_csv_path
 
 
-
 def ensure_columns_in_csv(csv_path, columns, temp_path, chunk_size=CHUNK_SIZE):
     """
     Ensure columns exist in CSV and save to temp file.
@@ -95,8 +107,9 @@ def ensure_columns_in_csv(csv_path, columns, temp_path, chunk_size=CHUNK_SIZE):
             chunk.to_csv(temp_path, index=False, mode="a", header=False)
 
 
-
-def get_locations_needing_processing(temp_path, key_column, city=CITY_FILTER, chunk_size=CHUNK_SIZE):
+def get_locations_needing_processing(
+    temp_path, key_column, city=CITY_FILTER, chunk_size=CHUNK_SIZE
+):
     """
     Get locations for a city where key_column is NaN.
     """
@@ -106,16 +119,25 @@ def get_locations_needing_processing(temp_path, key_column, city=CITY_FILTER, ch
         if len(city_chunk) > 0:
             unprocessed = city_chunk[city_chunk[key_column].isna()]
             for _, row in unprocessed.iterrows():
-                locations.append({
-                    "lat": row["latitude"],
-                    "lng": row["longitude"],
-                    "index": row.name if hasattr(row, "name") else None,
-                })
+                locations.append(
+                    {
+                        "lat": row["latitude"],
+                        "lng": row["longitude"],
+                        "index": row.name if hasattr(row, "name") else None,
+                    }
+                )
     return locations
 
 
-
-def update_csv_with_results(temp_path, results, columns, object_columns=OBJECT_COLUMNS, date_columns=DATE_COLUMNS, city_filter=CITY_FILTER, chunk_size=CHUNK_SIZE):
+def update_csv_with_results(
+    temp_path,
+    results,
+    columns,
+    object_columns=OBJECT_COLUMNS,
+    date_columns=DATE_COLUMNS,
+    city_filter=CITY_FILTER,
+    chunk_size=CHUNK_SIZE,
+):
     """
     Update temp CSV file with results for locations in a city.
     """
@@ -150,7 +172,6 @@ def update_csv_with_results(temp_path, results, columns, object_columns=OBJECT_C
     os.replace(temp_updated_path, temp_path)
 
 
-
 def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     """
     Process records for traffic analysis and save to a dedicated CSV for a city.
@@ -178,15 +199,24 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     total_locations = len(locations)
 
     for batch_start in range(0, total_locations, batch_size):
-        batch = locations[batch_start:batch_start+batch_size]
-        logger.info(f"Processing traffic for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}")
+        batch = locations[batch_start : batch_start + batch_size]
+        logger.info(
+            f"Processing traffic for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+        )
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
             future_to_loc = {
                 executor.submit(
-                    lambda loc: GoogleMapsTrafficAnalyzer(cleanup_driver=True).analyze_location_traffic(
-                        lat=loc["lat"], lng=loc["lng"], day_of_week="Monday", target_time="6:00PM"
-                    ), loc
-                ): loc for loc in batch
+                    lambda loc: GoogleMapsTrafficAnalyzer(
+                        cleanup_driver=True
+                    ).analyze_location_traffic(
+                        lat=loc["lat"],
+                        lng=loc["lng"],
+                        day_of_week="Monday",
+                        target_time="6:00PM",
+                    ),
+                    loc,
+                ): loc
+                for loc in batch
             }
             for future in as_completed(future_to_loc):
                 loc = future_to_loc[future]
@@ -199,11 +229,17 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
                 coord_key = f"{lat}_{lng}"
                 traffic_results[coord_key] = {
                     "traffic_score": traffic_result.get("score", 0),
-                    "traffic_details": json.dumps(traffic_result) if traffic_result else None,
-                    "traffic_analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "traffic_details": (
+                        json.dumps(traffic_result) if traffic_result else None
+                    ),
+                    "traffic_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
                 }
                 processed_count += 1
-        logger.info(f"Progress checkpoint: {processed_count}/{total_locations} locations processed")
+        logger.info(
+            f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
+        )
         update_csv_with_results(temp_path, traffic_results, TRAFFIC_COLUMNS)
         logger.info(f"Batch progress saved: {processed_count} records updated in CSV")
         traffic_results = {}  # Clear for next batch
@@ -214,7 +250,6 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     return output_path
 
 
-
 def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
     """
     Process records for demographic analysis and save to a dedicated CSV for a city.
@@ -223,7 +258,6 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
     city_csv_path = f"{base_path}_{city}.csv"
     output_path = f"{base_path}_{city}_enriched_with_demographics.csv"
     temp_path = f"{base_path}_{city}_temp_demographics.csv"
-    
 
     logger.info(f"Starting demographic analysis for {city} locations")
     logger.info(f"Input CSV: {city_csv_path}")
@@ -243,8 +277,10 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
     total_locations = len(locations)
 
     for batch_start in range(0, total_locations, batch_size):
-        batch = locations[batch_start:batch_start+batch_size]
-        logger.info(f"Processing demographics for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}")
+        batch = locations[batch_start : batch_start + batch_size]
+        logger.info(
+            f"Processing demographics for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+        )
         user_id, id_token = login_and_get_user()
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
             future_to_loc = {
@@ -254,7 +290,8 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
                     loc["lng"],
                     user_id,
                     id_token,
-                ): loc for loc in batch
+                ): loc
+                for loc in batch
             }
             for future in as_completed(future_to_loc):
                 loc = future_to_loc[future]
@@ -262,26 +299,30 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
                 demo_result = future.result()
                 demo_results[f"{lat}_{lng}"] = {
                     **demo_result,
-                    "demographics_analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "demographics_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
                 }
                 processed_count += 1
-        logger.info(f"Progress checkpoint: {processed_count}/{total_locations} locations processed")
+        logger.info(
+            f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
+        )
         update_csv_with_results(temp_path, demo_results, DEMOGRAPHIC_COLUMNS)
         logger.info(f"Batch progress saved: {processed_count} records updated in CSV")
         demo_results = {}  # Clear for next batch
     logger.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logger.info(f"Demographic analysis completed: {processed_count} locations processed")
+    logger.info(
+        f"Demographic analysis completed: {processed_count} locations processed"
+    )
     logger.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
 
-# Main script logic
+process_real_estate_data()
 current_dir = os.path.dirname(os.path.abspath(__file__))
 csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
-
-# Ensure city CSV is created/updated if needed
+add_listing_ids_to_csv(csv_path)
 ensure_city_csv(csv_path)
-# Example usage:
 process_city_demographics(csv_path, 10)
-process_city_traffic(csv_path, 1)
+# process_city_traffic(csv_path, 1)
