@@ -62,23 +62,32 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
     connections = {}
     try:
         # Process CSV files
-        for (db_name, schema_name, table_name), file_paths in objects_to_create[
-            "csv"
-        ].items():
+        for (db_name, schema_name, table_name), file_paths in objects_to_create["csv"].items():
             if db_name not in connections:
-                # This will create the database if it doesn't exist and return a connection to it
                 connections[db_name] = ensure_database_exists(config, db_name)
 
             conn = connections[db_name]
-            merged_df = read_and_merge_csv_files(gcp, file_paths)
+            # Use first CSV to create schema/table
+            first_blob = gcp.bucket.blob(file_paths[0])
+            first_data = first_blob.download_as_bytes()
+            try:
+                first_df = pd.read_csv(BytesIO(first_data), encoding="utf-8-sig", low_memory=False)
+            except UnicodeDecodeError:
+                first_df = pd.read_csv(BytesIO(first_data), encoding="ISO-8859-1", low_memory=False)
+            create_schema_and_table(conn, first_df, schema_name, table_name)
 
-            # Create schema and table with autocommit
-            create_schema_and_table(conn, merged_df, schema_name, table_name)
-
-            # Now insert data in a new transaction
-            insert_data_into_table(conn, merged_df, table_name, schema_name)
-            conn.commit()
-            print(f"Data inserted into {db_name}.{schema_name}.{table_name}")
+            # Insert each CSV sequentially
+            for file_path in file_paths:
+                print(f"Inserting CSV file into {db_name}.{schema_name}.{table_name}: {file_path}")
+                blob = gcp.bucket.blob(file_path)
+                data = blob.download_as_bytes()
+                try:
+                    df = pd.read_csv(BytesIO(data), encoding="utf-8-sig", low_memory=False)
+                except UnicodeDecodeError:
+                    df = pd.read_csv(BytesIO(data), encoding="ISO-8859-1", low_memory=False)
+                insert_data_into_table(conn, df, table_name, schema_name)
+                conn.commit()
+            print(f"All CSVs inserted into {db_name}.{schema_name}.{table_name}")
 
         # Process image files
         for (db_name, schema_name, table_name), image_data in objects_to_create[
@@ -376,22 +385,6 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
     return structure
 
 
-def read_and_merge_csv_files(slocator_gcp, file_paths):
-    dataframes = []
-    for file_path in file_paths:
-        print(f"Reading CSV file from GCP: {file_path}")
-        blob = slocator_gcp.bucket.blob(file_path)
-        data = blob.download_as_bytes()
-        try:
-            df = pd.read_csv(
-                BytesIO(data), encoding="utf-8-sig", low_memory=False
-            )  # handles both utf-8 and utf-8-sig
-        except UnicodeDecodeError:
-            df = pd.read_csv(
-                BytesIO(data), encoding="ISO-8859-1", low_memory=False
-            )
-        dataframes.append(df)
-    return pd.concat(dataframes, ignore_index=True)
 
 
 def process_all_pipelines(exclude_folders=[]):
