@@ -23,7 +23,7 @@ TRAFFIC_COLUMNS = [
     "traffic_score",
     "traffic_storefront_score",
     "traffic_area_score",
-    "traffic_screenshot_path",
+    "traffic_screenshot_filename",
 ]
 DEMOGRAPHIC_COLUMNS = [
     "total_population",
@@ -230,7 +230,6 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
                 lat, lng = loc["lat"], loc["lng"]
                 try:
                     traffic_result = future.result()
-                    traffic_result = json.dumps(traffic_result)
                 except Exception as e:
                     logger.error(
                         f"Traffic analysis failed for {lat}, {lng}: {e}"
@@ -241,12 +240,15 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
                 traffic_storefront_score = traffic_result.get("storefront_score", 0)
                 traffic_area_score = traffic_result.get("area_score", 0)
                 traffic_screenshot_path = traffic_result.get("screenshot_path", "")
+                # f:\git\zyte_scraper\cron_jobs\aquire_data\saudi_real_estate\step2\traffic_screenshots\traffic_24.677122_46.693966_Monday_6-00PM_pinned_frontscore=0_areascore=51.png
+                # i don't need the entire path just the file name
+                traffic_screenshot_filename = os.path.basename(traffic_screenshot_path)
                 coord_key = f"{lat}_{lng}"
                 traffic_results[coord_key] = {
                     "traffic_score": traffic_score,
                     "traffic_storefront_score": traffic_storefront_score,
                     "traffic_area_score": traffic_area_score,
-                    "traffic_screenshot_path": traffic_screenshot_path,
+                    "traffic_screenshot_filename": traffic_screenshot_filename,
                     "traffic_analysis_date": datetime.now().strftime(
                         "%Y-%m-%d %H:%M:%S"
                     ),
@@ -349,5 +351,5 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
 ensure_city_csv(csv_path)
-process_city_demographics(csv_path, 10)
-# process_city_traffic(csv_path, 1)
+# process_city_demographics(csv_path, 10)
+process_city_traffic(csv_path, 1)
