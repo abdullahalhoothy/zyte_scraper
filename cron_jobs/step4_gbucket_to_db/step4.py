@@ -40,7 +40,7 @@ def all_chunks(gcp, file_paths, chunk_size):
             yield chunk_df
 
 
-def bulk_insert_chunks_to_temp_table(
+def insert_all_chunks_to_temp_table(
     conn, chunk_iter, schema, temp_table_name, df_for_types
 ):
     """
@@ -81,7 +81,7 @@ def bulk_insert_chunks_to_temp_table(
     print(f"All chunks inserted into temporary table {schema}.{temp_table_name}.")
 
 
-def replace_table_with_temp(conn, schema, table_name, temp_table_name, df_for_types):
+def replace_table_with_temp(conn, schema, table_name, temp_table_name):
     """
     Atomically swap temp table with original table, using same logic as insert_data_into_table.
     df_for_types: DataFrame to infer column types (first chunk or sample)
@@ -200,12 +200,12 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
             # Bulk insert all chunks from all CSVs into temp table
             temp_table_name = f"temp_{table_name}"
             chunk_generator = all_chunks(gcp, file_paths, CHUNK_SIZE)
-            bulk_insert_chunks_to_temp_table(
+            insert_all_chunks_to_temp_table(
                 conn, chunk_generator, schema_name, temp_table_name, first_chunk
             )
             conn.commit()
             replace_table_with_temp(
-                conn, schema_name, table_name, temp_table_name, first_chunk
+                conn, schema_name, table_name, temp_table_name
             )
             conn.commit()
             print(f"All CSVs inserted into {db_name}.{schema_name}.{table_name}")
