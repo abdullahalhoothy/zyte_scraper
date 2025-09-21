@@ -283,5 +283,5 @@ csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 # Ensure city CSV is created/updated if needed
 ensure_city_csv(csv_path)
 # Example usage:
-# process_city_traffic(csv_path, 10)
 process_city_demographics(csv_path, 10)
+process_city_traffic(csv_path, 1)
