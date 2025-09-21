@@ -5,8 +5,8 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer, logger
 from step2_scrapy_transform_to_csv import process_real_estate_data
-from cron_jobs.aquire_data.saudi_real_estate.step2.step2_add_demographics import fetch_demographics
-from cron_jobs.aquire_data.saudi_real_estate.step2.step2_add_demographics import login_and_get_user
+from step2_add_demographics import fetch_demographics
+from step2_add_demographics import login_and_get_user
 from step2_extract_listing_id import add_listing_ids_to_csv
 
 # --- Centralized column definitions ---
