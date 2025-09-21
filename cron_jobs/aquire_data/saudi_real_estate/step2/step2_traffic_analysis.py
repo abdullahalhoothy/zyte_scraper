@@ -555,11 +555,11 @@ class GoogleMapsTrafficAnalyzer:
 
         # 60% weight for storefront traffic
         storefront_score = analysis.get('storefront_score', 0)
-        storefront_weight = 0.6
+        storefront_weight = 0.1 # lowered until storefront direction can be extracted
         logger.info(f"Storefront Score: {storefront_score}, Weight: {storefront_weight}")
 
         # 40% weight for surrounding area traffic with distance multipliers
-        area_weight = 0.4
+        area_weight = 0.9
         area_score = 0
         total_weighted_pixels = 0
 
