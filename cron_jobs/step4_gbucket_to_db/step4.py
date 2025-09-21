@@ -14,6 +14,116 @@ sys.path.append(module_dir)
 from common_methods import GCPBucketManager
 
 
+def all_chunks(gcp, file_paths, chunk_size):
+    """
+    Generator yielding DataFrame chunks from all CSV files in file_paths.
+    """
+    for file_path in file_paths:
+        print(f"Reading chunks from CSV: {file_path}")
+        blob = gcp.bucket.blob(file_path)
+        data = blob.download_as_bytes()
+        try:
+            chunk_iter = pd.read_csv(
+                BytesIO(data),
+                encoding="utf-8-sig",
+                low_memory=False,
+                chunksize=chunk_size,
+            )
+        except UnicodeDecodeError:
+            chunk_iter = pd.read_csv(
+                BytesIO(data),
+                encoding="ISO-8859-1",
+                low_memory=False,
+                chunksize=chunk_size,
+            )
+        for chunk_df in chunk_iter:
+            yield chunk_df
+
+
+def bulk_insert_chunks_to_temp_table(
+    conn, chunk_iter, schema, temp_table_name, df_for_types
+):
+    """
+    Create a temp table and insert all chunks into it (appending).
+    df_for_types: DataFrame to infer column types (first chunk or sample)
+    """
+    print(f"Creating temporary table {schema}.{temp_table_name} for bulk insert...")
+    columns = []
+    for col in df_for_types.columns:
+        dtype = (
+            "INTEGER"
+            if df_for_types[col].dtype == "int64"
+            else "REAL" if df_for_types[col].dtype == "float64" else "TEXT"
+        )
+        columns.append(sql.SQL("{} {}").format(sql.Identifier(col), sql.SQL(dtype)))
+    create_temp = sql.SQL("CREATE TABLE IF NOT EXISTS {}.{} ({})").format(
+        sql.Identifier(schema),
+        sql.Identifier(temp_table_name),
+        sql.SQL(", ").join(columns),
+    )
+    with conn.cursor() as cursor:
+        cursor.execute(create_temp)
+        for i, chunk_df in enumerate(chunk_iter):
+            print(f"Bulk inserting chunk {i+1} into {schema}.{temp_table_name}...")
+            csv_text = chunk_df.to_csv(
+                index=False, header=False, sep="\t", na_rep="\\N"
+            )
+            buffer = BytesIO(csv_text.encode("utf-8"))
+            buffer.seek(0)
+            columns_sql = sql.SQL(", ").join(
+                sql.Identifier(col) for col in chunk_df.columns
+            )
+            copy_cmd = sql.SQL(
+                "COPY {} ({}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')"
+            ).format(sql.SQL(f"{schema}.{temp_table_name}"), columns_sql)
+            cursor.execute("SET client_encoding TO 'UTF8'")
+            cursor.copy_expert(copy_cmd, buffer)
+    print(f"All chunks inserted into temporary table {schema}.{temp_table_name}.")
+
+
+def replace_table_with_temp(conn, schema, table_name, temp_table_name, df_for_types):
+    """
+    Atomically swap temp table with original table, using same logic as insert_data_into_table.
+    df_for_types: DataFrame to infer column types (first chunk or sample)
+    """
+    print(
+        f"Swapping tables: replacing {schema}.{table_name} with {schema}.{temp_table_name}..."
+    )
+    old_table = f"old_{table_name}"
+    with conn.cursor() as cursor:
+        # Drop old_table if exists
+        cursor.execute(
+            sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
+                sql.Identifier(schema), sql.Identifier(old_table)
+            )
+        )
+        # Rename current table to old_table
+        cursor.execute(
+            sql.SQL("ALTER TABLE {}.{} RENAME TO {}").format(
+                sql.Identifier(schema),
+                sql.Identifier(table_name),
+                sql.Identifier(old_table),
+            )
+        )
+        # Rename temp table to main table
+        cursor.execute(
+            sql.SQL("ALTER TABLE {}.{} RENAME TO {}").format(
+                sql.Identifier(schema),
+                sql.Identifier(temp_table_name),
+                sql.Identifier(table_name),
+            )
+        )
+        # Drop old_table
+        cursor.execute(
+            sql.SQL("DROP TABLE {}.{}").format(
+                sql.Identifier(schema), sql.Identifier(old_table)
+            )
+        )
+    print(
+        f"Table {schema}.{table_name} replaced with data from {schema}.{temp_table_name}."
+    )
+
+
 def ensure_database_exists(config, db_name):
     """
     Ensures database exists, creates it if it doesn't, and returns a connection to it
@@ -65,39 +175,39 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
                 connections[db_name] = ensure_database_exists(config, db_name)
 
             conn = connections[db_name]
-            # Use first CSV to create schema/table
+            # Use first CSV to infer types and create schema/table
             first_blob = gcp.bucket.blob(file_paths[0])
             first_data = first_blob.download_as_bytes()
+            CHUNK_SIZE = 5000  # Adjust chunk size as needed
             try:
-                first_df = pd.read_csv(
-                    BytesIO(first_data), encoding="utf-8-sig", low_memory=False
+                first_chunk_iter = pd.read_csv(
+                    BytesIO(first_data),
+                    encoding="utf-8-sig",
+                    low_memory=False,
+                    chunksize=CHUNK_SIZE,
                 )
             except UnicodeDecodeError:
-                first_df = pd.read_csv(
-                    BytesIO(first_data), encoding="ISO-8859-1", low_memory=False
+                first_chunk_iter = pd.read_csv(
+                    BytesIO(first_data),
+                    encoding="ISO-8859-1",
+                    low_memory=False,
+                    chunksize=CHUNK_SIZE,
                 )
-            create_schema_and_table(conn, first_df, schema_name, table_name)
+            # Get first chunk for type inference
+            first_chunk = next(first_chunk_iter)
+            create_schema_and_table(conn, first_chunk, schema_name, table_name)
 
-            # Insert each CSV sequentially
-            CHUNK_SIZE = 5000  # Adjust chunk size as needed
-            for file_path in file_paths:
-                print(
-                    f"Inserting CSV file into {db_name}.{schema_name}.{table_name}: {file_path}"
-                )
-                blob = gcp.bucket.blob(file_path)
-                data = blob.download_as_bytes()
-                try:
-                    chunk_iter = pd.read_csv(
-                        BytesIO(data), encoding="utf-8-sig", low_memory=False, chunksize=CHUNK_SIZE
-                    )
-                except UnicodeDecodeError:
-                    chunk_iter = pd.read_csv(
-                        BytesIO(data), encoding="ISO-8859-1", low_memory=False, chunksize=CHUNK_SIZE
-                    )
-                for i, chunk_df in enumerate(chunk_iter):
-                    print(f"Inserting chunk {i+1} of {file_path} into {db_name}.{schema_name}.{table_name}")
-                    insert_data_into_table(conn, chunk_df, table_name, schema_name)
-                    conn.commit()
+            # Bulk insert all chunks from all CSVs into temp table
+            temp_table_name = f"temp_{table_name}"
+            chunk_generator = all_chunks(gcp, file_paths, CHUNK_SIZE)
+            bulk_insert_chunks_to_temp_table(
+                conn, chunk_generator, schema_name, temp_table_name, first_chunk
+            )
+            conn.commit()
+            replace_table_with_temp(
+                conn, schema_name, table_name, temp_table_name, first_chunk
+            )
+            conn.commit()
             print(f"All CSVs inserted into {db_name}.{schema_name}.{table_name}")
 
         # Process image files
