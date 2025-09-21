@@ -21,8 +21,9 @@ INPUT_COLUMNS = [
 ]
 TRAFFIC_COLUMNS = [
     "traffic_score",
-    "traffic_details",
-    "traffic_analysis_date",
+    "traffic_storefront_score",
+    "traffic_area_score",
+    "traffic_screenshot_path",
 ]
 DEMOGRAPHIC_COLUMNS = [
     "total_population",
@@ -81,7 +82,9 @@ def ensure_city_csv(
                 city_chunk.to_csv(city_csv_path, index=False, mode="w")
                 first_chunk = False
             else:
-                city_chunk.to_csv(city_csv_path, index=False, mode="a", header=False)
+                city_chunk.to_csv(
+                    city_csv_path, index=False, mode="a", header=False
+                )
         logger.info(f"{city} records saved to: {city_csv_path}")
     else:
         print(f"{city} CSV is up-to-date: {city_csv_path}")
@@ -186,8 +189,12 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     logger.info(f"Enriched Output CSV: {output_path}")
 
     ensure_columns_in_csv(city_csv_path, TRAFFIC_COLUMNS, temp_path)
-    locations = get_locations_needing_processing(temp_path, "traffic_score", city)
-    logger.info(f"Found {len(locations)} {city} locations needing traffic analysis")
+    locations = get_locations_needing_processing(
+        temp_path, "traffic_score", city
+    )
+    logger.info(
+        f"Found {len(locations)} {city} locations needing traffic analysis"
+    )
     if len(locations) == 0:
         logger.info(f"All {city} locations already have traffic data")
         os.rename(temp_path, output_path)
@@ -223,15 +230,23 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
                 lat, lng = loc["lat"], loc["lng"]
                 try:
                     traffic_result = future.result()
+                    traffic_result = json.dumps(traffic_result)
                 except Exception as e:
-                    logger.error(f"Traffic analysis failed for {lat}, {lng}: {e}")
+                    logger.error(
+                        f"Traffic analysis failed for {lat}, {lng}: {e}"
+                    )
                     traffic_result = {"score": 0, "error": str(e)}
+                
+                traffic_score = traffic_result.get("score", 0)
+                traffic_storefront_score = traffic_result.get("storefront_score", 0)
+                traffic_area_score = traffic_result.get("area_score", 0)
+                traffic_screenshot_path = traffic_result.get("screenshot_path", "")
                 coord_key = f"{lat}_{lng}"
                 traffic_results[coord_key] = {
-                    "traffic_score": traffic_result.get("score", 0),
-                    "traffic_details": (
-                        json.dumps(traffic_result) if traffic_result else None
-                    ),
+                    "traffic_score": traffic_score,
+                    "traffic_storefront_score": traffic_storefront_score,
+                    "traffic_area_score": traffic_area_score,
+                    "traffic_screenshot_path": traffic_screenshot_path,
                     "traffic_analysis_date": datetime.now().strftime(
                         "%Y-%m-%d %H:%M:%S"
                     ),
@@ -241,11 +256,15 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, traffic_results, TRAFFIC_COLUMNS)
-        logger.info(f"Batch progress saved: {processed_count} records updated in CSV")
+        logger.info(
+            f"Batch progress saved: {processed_count} records updated in CSV"
+        )
         traffic_results = {}  # Clear for next batch
     logger.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logger.info(f"Traffic analysis completed: {processed_count} locations processed")
+    logger.info(
+        f"Traffic analysis completed: {processed_count} locations processed"
+    )
     logger.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
@@ -264,8 +283,12 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
     logger.info(f"Enriched Output CSV: {output_path}")
 
     ensure_columns_in_csv(city_csv_path, DEMOGRAPHIC_COLUMNS, temp_path)
-    locations = get_locations_needing_processing(temp_path, "total_population", city)
-    logger.info(f"Found {len(locations)} {city} locations needing demographic analysis")
+    locations = get_locations_needing_processing(
+        temp_path, "total_population", city
+    )
+    logger.info(
+        f"Found {len(locations)} {city} locations needing demographic analysis"
+    )
     if len(locations) == 0:
         logger.info(f"All {city} locations already have demographic data")
         os.rename(temp_path, output_path)
@@ -308,7 +331,9 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, demo_results, DEMOGRAPHIC_COLUMNS)
-        logger.info(f"Batch progress saved: {processed_count} records updated in CSV")
+        logger.info(
+            f"Batch progress saved: {processed_count} records updated in CSV"
+        )
         demo_results = {}  # Clear for next batch
     logger.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
@@ -325,4 +350,4 @@ csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
 ensure_city_csv(csv_path)
 process_city_demographics(csv_path, 10)
-process_city_traffic(csv_path, 1)
+# process_city_traffic(csv_path, 1)
