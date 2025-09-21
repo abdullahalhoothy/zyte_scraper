@@ -174,7 +174,6 @@ def aqar_real_estate_historic():
         price BIGINT,
         latitude REAL,
         longitude REAL,
-        category_ar TEXT,
         category_id INTEGER,
         city TEXT,
         city_id INTEGER,
@@ -204,7 +203,6 @@ def aqar_real_estate_historic():
         price,
         latitude,
         longitude,
-        category_ar,
         category_id,
         city,
         city_id,
@@ -232,7 +230,6 @@ def aqar_real_estate_historic():
         price,
         latitude,
         longitude,
-        category_ar,
         category_id,
         city,
         city_id,
@@ -277,6 +274,7 @@ def historic_to_saudi_real_estate():
 
     -- Create table if it doesn't exist (add demographic columns)
     CREATE TABLE IF NOT EXISTS schema_marketplace.saudi_real_estate (
+        listing_id BIGINT,
         url TEXT NOT NULL,
         city TEXT NULL,
         price BIGINT NULL,
@@ -302,30 +300,30 @@ def historic_to_saudi_real_estate():
     TRUNCATE TABLE schema_marketplace.saudi_real_estate;
 
     WITH current_listings AS (
-        SELECT url, city, price, latitude, longitude, category
+        SELECT listing_id, url, city, price, latitude, longitude, category
         FROM schema_marketplace.aqar_real_estate_historic
         WHERE is_current = true
     ),
     demo_enriched AS (
         SELECT 
-            cl.url, cl.city, cl.price, cl.latitude, cl.longitude, cl.category,
+            cl.listing_id, cl.url, cl.city, cl.price, cl.latitude, cl.longitude, cl.category,
             red.direction_id, red.total_population, red.avg_density,
             red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
             red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
             red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date
         FROM current_listings cl
         LEFT JOIN raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
-            ON cl.url = red.url
+            ON cl.listing_id = red.listing_id
     )
     INSERT INTO schema_marketplace.saudi_real_estate (
-        url, city, price, latitude, longitude, category,
+        listing_id, url, city, price, latitude, longitude, category,
         direction_id, total_population, avg_density, avg_median_age, avg_income,
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
         percentage_age_above_50, demographics_analysis_date
     )
     SELECT 
-        url, city, price, latitude, longitude, category,
+        listing_id, url, city, price, latitude, longitude, category,
         direction_id, total_population, avg_density, avg_median_age, avg_income,
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
