@@ -74,8 +74,8 @@ def insert_all_chunks_to_temp_table(
                 sql.Identifier(col) for col in chunk_df.columns
             )
             copy_cmd = sql.SQL(
-                "COPY {} ({}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')"
-            ).format(sql.SQL(f"{schema}.{temp_table_name}"), columns_sql)
+                "COPY {}.{} ({}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')"
+            ).format(sql.Identifier(schema), sql.Identifier(temp_table_name), columns_sql)
             cursor.execute("SET client_encoding TO 'UTF8'")
             cursor.copy_expert(copy_cmd, buffer)
     print(f"All chunks inserted into temporary table {schema}.{temp_table_name}.")

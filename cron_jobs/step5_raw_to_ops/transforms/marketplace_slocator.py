@@ -272,7 +272,7 @@ def historic_to_saudi_real_estate():
     -- Create schema if it doesn't exist
     CREATE SCHEMA IF NOT EXISTS schema_marketplace;
 
-    -- Create table if it doesn't exist (add demographic columns)
+    -- Create table if it doesn't exist (add demographic and traffic columns)
     CREATE TABLE IF NOT EXISTS schema_marketplace.saudi_real_estate (
         listing_id BIGINT,
         url TEXT NOT NULL,
@@ -293,7 +293,11 @@ def historic_to_saudi_real_estate():
         percentage_age_above_40 REAL,
         percentage_age_above_45 REAL,
         percentage_age_above_50 REAL,
-        demographics_analysis_date TEXT
+        demographics_analysis_date TEXT,
+        traffic_score REAL,
+        traffic_storefront_score REAL,
+        traffic_area_score REAL,
+        traffic_screenshot_filename TEXT
     );
 
     -- Truncate the table to ensure clean data
@@ -314,19 +318,38 @@ def historic_to_saudi_real_estate():
         FROM current_listings cl
         LEFT JOIN raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
             ON cl.listing_id = red.listing_id
+    ),
+    traffic_enriched AS (
+        SELECT 
+            te.listing_id, te.url, te.latitude, te.longitude, te.city, te.direction_id, te.category,
+            te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename
+        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_traffic" te
+    ),
+    merged_enriched AS (
+        SELECT 
+            de.listing_id, de.url, de.city, de.price, de.latitude, de.longitude, de.category,
+            de.direction_id, de.total_population, de.avg_density, de.avg_median_age, de.avg_income,
+            de.percentage_age_above_20, de.percentage_age_above_25, de.percentage_age_above_30,
+            de.percentage_age_above_35, de.percentage_age_above_40, de.percentage_age_above_45,
+            de.percentage_age_above_50, de.demographics_analysis_date,
+            te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename
+        FROM demo_enriched de
+        LEFT JOIN traffic_enriched te ON de.listing_id = te.listing_id
     )
     INSERT INTO schema_marketplace.saudi_real_estate (
         listing_id, url, city, price, latitude, longitude, category,
         direction_id, total_population, avg_density, avg_median_age, avg_income,
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
-        percentage_age_above_50, demographics_analysis_date
+        percentage_age_above_50, demographics_analysis_date,
+        traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename
     )
     SELECT 
         listing_id, url, city, price, latitude, longitude, category,
         direction_id, total_population, avg_density, avg_median_age, avg_income,
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
-        percentage_age_above_50, demographics_analysis_date
-    FROM demo_enriched;
+        percentage_age_above_50, demographics_analysis_date,
+        traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename
+    FROM merged_enriched;
     """
