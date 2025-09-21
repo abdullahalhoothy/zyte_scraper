@@ -9,9 +9,7 @@ import sys
 from io import StringIO
 from geojsongcp2postgis import run_geojson_gcp_to_db
 
-module_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..")
-)
+module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(module_dir)
 from common_methods import GCPBucketManager
 
@@ -33,9 +31,7 @@ def ensure_database_exists(config, db_name):
                 with postgres_conn.cursor() as cursor:
                     # Create the new database
                     cursor.execute(
-                        sql.SQL("CREATE DATABASE {}").format(
-                            sql.Identifier(db_name)
-                        )
+                        sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name))
                     )
                 print(f"Successfully created database {db_name}")
             finally:
@@ -62,7 +58,9 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
     connections = {}
     try:
         # Process CSV files
-        for (db_name, schema_name, table_name), file_paths in objects_to_create["csv"].items():
+        for (db_name, schema_name, table_name), file_paths in objects_to_create[
+            "csv"
+        ].items():
             if db_name not in connections:
                 connections[db_name] = ensure_database_exists(config, db_name)
 
@@ -71,20 +69,30 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
             first_blob = gcp.bucket.blob(file_paths[0])
             first_data = first_blob.download_as_bytes()
             try:
-                first_df = pd.read_csv(BytesIO(first_data), encoding="utf-8-sig", low_memory=False)
+                first_df = pd.read_csv(
+                    BytesIO(first_data), encoding="utf-8-sig", low_memory=False
+                )
             except UnicodeDecodeError:
-                first_df = pd.read_csv(BytesIO(first_data), encoding="ISO-8859-1", low_memory=False)
+                first_df = pd.read_csv(
+                    BytesIO(first_data), encoding="ISO-8859-1", low_memory=False
+                )
             create_schema_and_table(conn, first_df, schema_name, table_name)
 
             # Insert each CSV sequentially
             for file_path in file_paths:
-                print(f"Inserting CSV file into {db_name}.{schema_name}.{table_name}: {file_path}")
+                print(
+                    f"Inserting CSV file into {db_name}.{schema_name}.{table_name}: {file_path}"
+                )
                 blob = gcp.bucket.blob(file_path)
                 data = blob.download_as_bytes()
                 try:
-                    df = pd.read_csv(BytesIO(data), encoding="utf-8-sig", low_memory=False)
+                    df = pd.read_csv(
+                        BytesIO(data), encoding="utf-8-sig", low_memory=False
+                    )
                 except UnicodeDecodeError:
-                    df = pd.read_csv(BytesIO(data), encoding="ISO-8859-1", low_memory=False)
+                    df = pd.read_csv(
+                        BytesIO(data), encoding="ISO-8859-1", low_memory=False
+                    )
                 insert_data_into_table(conn, df, table_name, schema_name)
                 conn.commit()
             print(f"All CSVs inserted into {db_name}.{schema_name}.{table_name}")
@@ -99,9 +107,7 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
             conn = connections[db_name]
             insert_image_metadata(conn, schema_name, table_name, image_data)
             conn.commit()
-            print(
-                f"Image metadata inserted into {db_name}.{schema_name}.{table_name}"
-            )
+            print(f"Image metadata inserted into {db_name}.{schema_name}.{table_name}")
 
     except Exception as e:
         print(f"Error occurred: {e}")
@@ -180,7 +186,6 @@ def create_schema_and_table(conn, df, schema, table_name):
         conn.autocommit = False  # Restore autocommit to False
 
 
-
 def insert_data_into_table(conn, df, table_name, schema):
     # add prints to this function for debugging
     print(f"Inserting data into {schema}.{table_name}...")
@@ -254,15 +259,11 @@ def insert_data_into_table(conn, df, table_name, schema):
             qualified_temp_table = sql.SQL("{}.{}").format(
                 sql.Identifier(schema), sql.Identifier(temp_table)
             )
-            columns = sql.SQL(", ").join(
-                sql.Identifier(col) for col in df.columns
-            )
+            columns = sql.SQL(", ").join(sql.Identifier(col) for col in df.columns)
             copy_cmd = sql.SQL(
                 "COPY {} ({}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')"
             ).format(qualified_temp_table, columns)
-            cursor.execute(
-                "SET client_encoding TO 'UTF8'"
-            )  # Handle special characters
+            cursor.execute("SET client_encoding TO 'UTF8'")  # Handle special characters
             cursor.copy_expert(copy_cmd, buffer)
 
             # Swap tables
@@ -288,19 +289,13 @@ def insert_data_into_table(conn, df, table_name, schema):
             ]
             for cmd in rename_commands:
                 cursor.execute(cmd)
-            print(
-                f"Table {schema}.{table_name} replaced with {len(df)} new rows"
-            )
+            print(f"Table {schema}.{table_name} replaced with {len(df)} new rows")
             if columns_to_alter:
-                print(
-                    f"Columns converted to BIGINT: {', '.join(columns_to_alter)}"
-                )
+                print(f"Columns converted to BIGINT: {', '.join(columns_to_alter)}")
         except Exception as e:
             print(f"Error during copy to {schema}.{table_name}: {e}")
             print("First row of DataFrame:")
-            print(
-                df.iloc[0].to_dict() if not df.empty else "<DataFrame is empty>"
-            )
+            print(df.iloc[0].to_dict() if not df.empty else "<DataFrame is empty>")
             print("DataFrame dtypes:")
             print(df.dtypes)
             print("First 200 bytes of buffer:")
@@ -309,9 +304,7 @@ def insert_data_into_table(conn, df, table_name, schema):
             # Save first 10 rows to CSV for debugging
             debug_csv_name = f"debug_first_rows_{schema}_{table_name}.csv"
             try:
-                df.head(10).to_csv(
-                    debug_csv_name, index=False, encoding="utf-8-sig"
-                )
+                df.head(10).to_csv(debug_csv_name, index=False, encoding="utf-8-sig")
                 print(f"Saved first 10 rows to {debug_csv_name}")
             except Exception as save_err:
                 print(f"Failed to save debug CSV: {save_err}")
@@ -375,16 +368,14 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
         if blob.name.endswith(".csv"):
             # remove .csv extension for table name
             table_name = parts[5].rsplit(".csv", 1)[0]
-            structure["csv"].setdefault(
-                (db_name, schema_name, table_name), []
-            ).append(blob.name)
+            structure["csv"].setdefault((db_name, schema_name, table_name), []).append(
+                blob.name
+            )
         if blob.name.endswith(".jpeg") or blob.name.endswith(".png"):
-            structure["images"].setdefault(
-                (db_name, schema_name, dir_name), []
-            ).append((dir_date, blob.public_url))
+            structure["images"].setdefault((db_name, schema_name, dir_name), []).append(
+                (dir_date, blob.public_url)
+            )
     return structure
-
-
 
 
 def process_all_pipelines(exclude_folders=[]):
@@ -437,7 +428,7 @@ process_all_pipelines(
         "household",
         "housing",
         "population",
-        "interpolated_income"
+        "interpolated_income",
     ]
 )
 run_geojson_gcp_to_db()
