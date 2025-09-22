@@ -266,6 +266,93 @@ def aqar_real_estate_historic():
              COALESCE(extraction_timestamp, 0) DESC;
     """
 
+def create_enriched_demographic_table():
+    return """
+    -- Create schema if it doesn't exist
+    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
+
+    -- Create enriched demographics table if it doesn't exist
+    CREATE TABLE IF NOT EXISTS schema_marketplace."saudi_real_estate_demographic_enriched" (
+        listing_id BIGINT,
+        direction_id TEXT,
+        total_population BIGINT,
+        avg_density REAL,
+        avg_median_age REAL,
+        avg_income REAL,
+        percentage_age_above_20 REAL,
+        percentage_age_above_25 REAL,
+        percentage_age_above_30 REAL,
+        percentage_age_above_35 REAL,
+        percentage_age_above_40 REAL,
+        percentage_age_above_45 REAL,
+        percentage_age_above_50 REAL,
+        demographics_analysis_date TEXT,
+        is_current BOOLEAN
+    );
+
+    TRUNCATE TABLE schema_marketplace."saudi_real_estate_demographic_enriched";
+
+    INSERT INTO schema_marketplace."saudi_real_estate_demographic_enriched" (
+        listing_id, direction_id, total_population, avg_density, avg_median_age, avg_income,
+        percentage_age_above_20, percentage_age_above_25, percentage_age_above_30, percentage_age_above_35,
+        percentage_age_above_40, percentage_age_above_45, percentage_age_above_50, demographics_analysis_date,
+        is_current
+    )
+    SELECT 
+        red.listing_id, red.direction_id, red.total_population, red.avg_density,
+        red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
+        red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
+        red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date
+    -- mark latest per listing_id as is_current = true based on demographics_analysis_date
+    , CASE WHEN ROW_NUMBER() OVER (
+        PARTITION BY red.listing_id
+        ORDER BY COALESCE(red.demographics_analysis_date, '1900-01-01') DESC
+    ) = 1 THEN TRUE ELSE FALSE END AS is_current
+
+    FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
+    """
+
+def create_enriched_traffic_table():
+    return """
+    -- Create schema if it doesn't exist
+    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
+
+    -- Create enriched traffic table if it doesn't exist
+    CREATE TABLE IF NOT EXISTS schema_marketplace."saudi_real_estate_traffic_enriched" (
+        listing_id BIGINT,
+        url TEXT,
+        latitude REAL,
+        longitude REAL,
+        city TEXT,
+        direction_id TEXT,
+        category TEXT,
+        traffic_score REAL,
+        traffic_storefront_score REAL,
+        traffic_area_score REAL,
+        traffic_screenshot_filename TEXT,
+        traffic_analysis_date TEXT,
+        is_current BOOLEAN
+    );
+
+    TRUNCATE TABLE schema_marketplace."saudi_real_estate_traffic_enriched";
+
+    INSERT INTO schema_marketplace."saudi_real_estate_traffic_enriched" (
+        listing_id, url, latitude, longitude, city, direction_id, category,
+        traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename,
+        traffic_analysis_date, is_current
+    )
+    SELECT 
+        te.listing_id, te.url, te.latitude, te.longitude, te.city, te.direction_id, te.category,
+        te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
+        te.traffic_analysis_date,
+    -- mark latest per listing_id as is_current = true based on traffic_analysis_date
+    CASE WHEN ROW_NUMBER() OVER (
+        PARTITION BY te.listing_id
+        ORDER BY COALESCE(te.traffic_analysis_date, '1900-01-01') DESC
+    ) = 1 THEN TRUE ELSE FALSE END AS is_current
+
+    FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_traffic" te
+    """
 
 def historic_to_saudi_real_estate():
     return """
@@ -309,34 +396,6 @@ def historic_to_saudi_real_estate():
         FROM schema_marketplace.aqar_real_estate_historic
         WHERE is_current = true
     ),
-    demo_enriched AS (
-        SELECT 
-            red.listing_id, red.direction_id, red.total_population, red.avg_density,
-            red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
-            red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
-            red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date
-        -- mark latest per listing_id as is_current = true based on demographics_analysis_date
-        , CASE WHEN ROW_NUMBER() OVER (
-            PARTITION BY red.listing_id
-            ORDER BY COALESCE(red.demographics_analysis_date, '1900-01-01') DESC
-        ) = 1 THEN TRUE ELSE FALSE END AS is_current
-
-        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
-
-        ),
-    traffic_enriched AS (
-        SELECT 
-            te.listing_id, te.url, te.latitude, te.longitude, te.city, te.direction_id, te.category,
-            te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
-            te.traffic_analysis_date,
-        -- mark latest per listing_id as is_current = true based on traffic_analysis_date
-        CASE WHEN ROW_NUMBER() OVER (
-            PARTITION BY te.listing_id
-            ORDER BY COALESCE(te.traffic_analysis_date, '1900-01-01') DESC
-        ) = 1 THEN TRUE ELSE FALSE END AS is_current
-
-        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_traffic" te
-    ),
     merged_enriched AS (
         SELECT 
             cl.listing_id, cl.url, cl.city, cl.price, cl.latitude, cl.longitude, cl.category,
@@ -347,11 +406,11 @@ def historic_to_saudi_real_estate():
             te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
             te.traffic_analysis_date
         FROM current_listings cl
-        LEFT JOIN traffic_enriched te ON 
-            cl.listing_id = te.listing_id
 
-        LEFT JOIN demo_enriched red
+        LEFT JOIN schema_marketplace.saudi_real_estate_demographics_enriched red
             ON cl.listing_id = red.listing_id
+        LEFT JOIN schema_marketplace.saudi_real_estate_traffic_enriched te ON 
+            cl.listing_id = te.listing_id
 
         WHERE te.is_current = true
             AND red.is_current = true
