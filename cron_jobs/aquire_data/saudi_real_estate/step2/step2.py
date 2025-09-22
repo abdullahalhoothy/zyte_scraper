@@ -24,6 +24,7 @@ TRAFFIC_COLUMNS = [
     "traffic_storefront_score",
     "traffic_area_score",
     "traffic_screenshot_filename",
+    "traffic_analysis_date",
 ]
 DEMOGRAPHIC_COLUMNS = [
     "total_population",
