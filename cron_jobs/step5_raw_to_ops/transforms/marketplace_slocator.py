@@ -407,7 +407,7 @@ def historic_to_saudi_real_estate():
             te.traffic_analysis_date
         FROM current_listings cl
 
-        LEFT JOIN schema_marketplace.saudi_real_estate_demographics_enriched red
+        LEFT JOIN schema_marketplace.saudi_real_estate_demographic_enriched red
             ON cl.listing_id = red.listing_id
         LEFT JOIN schema_marketplace.saudi_real_estate_traffic_enriched te ON 
             cl.listing_id = te.listing_id
