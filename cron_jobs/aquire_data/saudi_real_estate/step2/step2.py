@@ -1,6 +1,6 @@
 from datetime import datetime
 import os
-import json
+from time import sleep
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer, logger
@@ -172,8 +172,14 @@ def update_csv_with_results(
             first_chunk_update = False
         else:
             chunk.to_csv(temp_updated_path, index=False, mode="a", header=False)
-    os.replace(temp_updated_path, temp_path)
-
+    try:
+        sleep(2)
+        os.replace(temp_updated_path, temp_path)
+    except Exception as e:
+        # warning log
+        logger.warning(
+            f"Failed to replace {temp_path} with updated file {temp_updated_path}: {e}"
+        )
 
 def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     """
@@ -351,5 +357,5 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
 ensure_city_csv(csv_path)
-process_city_demographics(csv_path, 10)
+# process_city_demographics(csv_path, 10)
 process_city_traffic(csv_path, 1)
