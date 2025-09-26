@@ -310,6 +310,7 @@ def create_enriched_demographic_table():
     ) = 1 THEN TRUE ELSE FALSE END AS is_current
 
     FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
+    where red.is_current = true
     """
 
 def create_enriched_traffic_table():
@@ -352,6 +353,7 @@ def create_enriched_traffic_table():
     ) = 1 THEN TRUE ELSE FALSE END AS is_current
 
     FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_traffic" te
+    where te.is_current = true
     """
 
 def historic_to_saudi_real_estate():
@@ -411,9 +413,6 @@ def historic_to_saudi_real_estate():
             ON cl.listing_id = red.listing_id
         LEFT JOIN schema_marketplace.saudi_real_estate_traffic_enriched te ON 
             cl.listing_id = te.listing_id
-
-        WHERE te.is_current = true
-            AND red.is_current = true
         
     )
     INSERT INTO schema_marketplace.saudi_real_estate (
