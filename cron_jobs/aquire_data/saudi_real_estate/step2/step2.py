@@ -4,11 +4,10 @@ from time import sleep
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer, logger
-from step2_scrapy_transform_to_csv import process_real_estate_data
 from step2_add_demographics import fetch_demographics
 from step2_add_demographics import login_and_get_user
 from step2_add_demographics import fetch_household_from_db
-from step2_extract_listing_id import add_listing_ids_to_csv
+from step2_add_demographics import fetch_housing_from_db
 
 # --- Centralized column definitions ---
 INPUT_COLUMNS = [
@@ -46,8 +45,22 @@ HOUSEHOLD_COLUMNS = [
     "avg_household_size",
     "median_household_size",
     "density_sum",
-    "features_count",
     "household_analysis_date",
+]
+HOUSING_COLUMNS = [
+    "total_housings",
+    "residential_housings",
+    "non_residential_housings",
+    "owned_housings",
+    "rented_housings",
+    "provided_housings",
+    "other_residential_housings",
+    "public_housing",
+    "work_camps",
+    "commercial_housings",
+    "other_housings",
+    "density_sum",
+    "housing_analysis_date",
 ]
 OBJECT_COLUMNS = [
     "demographics_analysis_date",
@@ -448,6 +461,99 @@ def process_city_household(csv_path: str, batch_size: int, city=CITY_FILTER):
     return output_path
 
 
+def process_city_housing(csv_path: str, batch_size: int, city=CITY_FILTER):
+    """
+    Process records for housing analysis and save to a dedicated CSV for a city.
+    Uses database queries instead of remote API calls.
+    """
+    base_path = csv_path.rsplit(".csv", 1)[0]
+    city_csv_path = f"{base_path}_{city}.csv"
+    output_path = f"{base_path}_{city}_enriched_with_housing.csv"
+    temp_path = f"{base_path}_{city}_temp_housing.csv"
+
+    logger.info(f"Starting housing analysis for {city} locations")
+    logger.info(f"Input CSV: {city_csv_path}")
+    logger.info(f"Enriched Output CSV: {output_path}")
+
+    ensure_columns_in_csv(city_csv_path, HOUSING_COLUMNS, temp_path)
+    locations = get_locations_needing_processing(
+        temp_path, "total_housings", city
+    )
+    logger.info(
+        f"Found {len(locations)} {city} locations needing housing analysis"
+    )
+    if len(locations) == 0:
+        logger.info(f"All {city} locations already have housing data")
+        os.rename(temp_path, output_path)
+        logger.info(f"All data saved to: {output_path}")
+        return output_path
+
+    processed_count = 0
+    housing_results = {}
+    total_locations = len(locations)
+
+    for batch_start in range(0, total_locations, batch_size):
+        batch = locations[batch_start : batch_start + batch_size]
+        logger.info(
+            f"Processing housing for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+        )
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            future_to_loc = {
+                executor.submit(
+                    fetch_housing_from_db,
+                    loc["lat"],
+                    loc["lng"],
+                    1,
+                ): loc
+                for loc in batch
+            }
+            for future in as_completed(future_to_loc):
+                loc = future_to_loc[future]
+                lat, lng = loc["lat"], loc["lng"]
+                try:
+                    housing_result = future.result()
+                except Exception as e:
+                    logger.error(f"Housing DB query failed for {lat}, {lng}: {e}")
+                    housing_result = {
+                        "total_housings": 0,
+                        "residential_housings": 0,
+                        "non_residential_housings": 0,
+                        "owned_housings": 0,
+                        "rented_housings": 0,
+                        "provided_housings": 0,
+                        "other_residential_housings": 0,
+                        "public_housing": 0,
+                        "work_camps": 0,
+                        "commercial_housings": 0,
+                        "other_housings": 0,
+                        "density_sum": 0.0,
+                    }
+
+                coord_key = f"{lat}_{lng}"
+                housing_results[coord_key] = {
+                    **housing_result,
+                    "housing_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                }
+                processed_count += 1
+        logger.info(
+            f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
+        )
+        update_csv_with_results(temp_path, housing_results, HOUSING_COLUMNS)
+        logger.info(
+            f"Batch progress saved: {processed_count} records updated in CSV"
+        )
+        housing_results = {}  # Clear for next batch
+    logger.info("Finalizing enriched output file...")
+    os.rename(temp_path, output_path)
+    logger.info(
+        f"Housing analysis completed: {processed_count} locations processed"
+    )
+    logger.info(f"Enriched CSV with all data saved to: {output_path}")
+    return output_path
+
+
 # process_real_estate_data()
 current_dir = os.path.dirname(os.path.abspath(__file__))
 csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
@@ -455,4 +561,5 @@ csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 # ensure_city_csv(csv_path)
 # process_city_demographics(csv_path, 10)
 # process_city_traffic(csv_path, 1)
-process_city_household(csv_path, batch_size=10, city=CITY_FILTER)
+# process_city_household(csv_path, batch_size=10, city=CITY_FILTER)
+process_city_housing(csv_path, batch_size=10, city=CITY_FILTER)

@@ -12,8 +12,6 @@ CREATE TABLE IF NOT EXISTS schema_marketplace.datasets
     """
 
 
-
-
 def canada_commercial_properties():
     return """
     CREATE SCHEMA IF NOT EXISTS schema_marketplace;
@@ -266,6 +264,7 @@ def aqar_real_estate_historic():
              COALESCE(extraction_timestamp, 0) DESC;
     """
 
+
 def create_enriched_demographic_table():
     return """
     -- Create schema if it doesn't exist
@@ -292,26 +291,229 @@ def create_enriched_demographic_table():
 
     TRUNCATE TABLE schema_marketplace."saudi_real_estate_demographic_enriched";
 
+    WITH enriched_with_is_current AS (
+        SELECT 
+            red.listing_id,
+            red.direction_id,
+            red.total_population,
+            red.avg_density,
+            red.avg_median_age,
+            red.avg_income,
+            red.percentage_age_above_20,
+            red.percentage_age_above_25,
+            red.percentage_age_above_30,
+            red.percentage_age_above_35,
+            red.percentage_age_above_40,
+            red.percentage_age_above_45,
+            red.percentage_age_above_50,
+            red.demographics_analysis_date,
+            CASE 
+                WHEN ROW_NUMBER() OVER (
+                    PARTITION BY red.listing_id
+                    ORDER BY COALESCE(red.demographics_analysis_date, '1900-01-01') DESC
+                ) = 1 
+                THEN TRUE 
+                ELSE FALSE 
+            END AS is_current
+        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
+    ),
+    current_only AS (
+        SELECT *
+        FROM enriched_with_is_current
+        WHERE is_current = true
+    )
     INSERT INTO schema_marketplace."saudi_real_estate_demographic_enriched" (
-        listing_id, direction_id, total_population, avg_density, avg_median_age, avg_income,
-        percentage_age_above_20, percentage_age_above_25, percentage_age_above_30, percentage_age_above_35,
-        percentage_age_above_40, percentage_age_above_45, percentage_age_above_50, demographics_analysis_date,
+        listing_id,
+        direction_id,
+        total_population,
+        avg_density,
+        avg_median_age,
+        avg_income,
+        percentage_age_above_20,
+        percentage_age_above_25,
+        percentage_age_above_30,
+        percentage_age_above_35,
+        percentage_age_above_40,
+        percentage_age_above_45,
+        percentage_age_above_50,
+        demographics_analysis_date,
         is_current
     )
     SELECT 
-        red.listing_id, red.direction_id, red.total_population, red.avg_density,
-        red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
-        red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
-        red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date
-    -- mark latest per listing_id as is_current = true based on demographics_analysis_date
-    , CASE WHEN ROW_NUMBER() OVER (
-        PARTITION BY red.listing_id
-        ORDER BY COALESCE(red.demographics_analysis_date, '1900-01-01') DESC
-    ) = 1 THEN TRUE ELSE FALSE END AS is_current
-
-    FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
-    where red.is_current = true
+        listing_id,
+        direction_id,
+        total_population,
+        avg_density,
+        avg_median_age,
+        avg_income,
+        percentage_age_above_20,
+        percentage_age_above_25,
+        percentage_age_above_30,
+        percentage_age_above_35,
+        percentage_age_above_40,
+        percentage_age_above_45,
+        percentage_age_above_50,
+        demographics_analysis_date,
+        is_current
+    FROM current_only;
     """
+
+def create_enriched_household_table():
+    return """
+    -- Create schema if it doesn't exist
+    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
+
+    -- Create enriched demographics table if it doesn't exist
+    CREATE TABLE IF NOT EXISTS schema_marketplace."saudi_real_estate_household_enriched" (
+        listing_id BIGINT,
+        total_households BIGINT,
+        avg_household_size REAL,
+        median_household_size REAL,
+        density_sum REAL,
+        household_analysis_date TEXT,
+        is_current BOOLEAN
+    );
+
+    TRUNCATE TABLE schema_marketplace."saudi_real_estate_household_enriched";
+
+    WITH ranked_listings AS (
+        SELECT 
+            listing_id,
+            total_households,
+            avg_household_size,
+            median_household_size,
+            density_sum,
+            household_analysis_date,
+            CASE 
+                WHEN ROW_NUMBER() OVER (
+                    PARTITION BY listing_id
+                    ORDER BY COALESCE(household_analysis_date, '1900-01-01') DESC
+                ) = 1 
+                THEN TRUE 
+                ELSE FALSE 
+            END AS is_current
+        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_household"
+    ),
+    current_records AS (
+        SELECT *
+        FROM ranked_listings
+        WHERE is_current = TRUE
+    )
+    INSERT INTO schema_marketplace."saudi_real_estate_household_enriched" (
+        listing_id,
+        total_households,
+        avg_household_size,
+        median_household_size,
+        density_sum,
+        household_analysis_date,
+        is_current
+    )
+    SELECT 
+        listing_id,
+        total_households,
+        avg_household_size,
+        median_household_size,
+        density_sum,
+        household_analysis_date,
+        is_current
+    FROM current_records;
+    """
+
+
+def create_enriched_housing_table():
+    return """
+    -- Create schema if it doesn't exist
+    CREATE SCHEMA IF NOT EXISTS schema_marketplace;
+
+    -- Create enriched housing table if it doesn't exist
+    CREATE TABLE IF NOT EXISTS schema_marketplace."saudi_real_estate_housing_enriched" (
+        listing_id BIGINT,
+        total_housings BIGINT,
+        residential_housings BIGINT,
+        non_residential_housings BIGINT,
+        owned_housings BIGINT,
+        rented_housings BIGINT,
+        provided_housings BIGINT,
+        other_residential_housings BIGINT,
+        public_housing BIGINT,
+        work_camps BIGINT,
+        commercial_housings BIGINT,
+        other_housings BIGINT,
+        density_sum REAL,
+        housing_analysis_date TEXT,
+        is_current BOOLEAN
+    );
+
+    TRUNCATE TABLE schema_marketplace."saudi_real_estate_housing_enriched";
+
+    WITH ranked_listings AS (
+        SELECT 
+            listing_id,
+            total_housings,
+            residential_housings,
+            non_residential_housings,
+            owned_housings,
+            rented_housings,
+            provided_housings,
+            other_residential_housings,
+            public_housing,
+            work_camps,
+            commercial_housings,
+            other_housings,
+            density_sum,
+            housing_analysis_date,
+            CASE 
+                WHEN ROW_NUMBER() OVER (
+                    PARTITION BY listing_id
+                    ORDER BY COALESCE(housing_analysis_date, '1900-01-01') DESC
+                ) = 1 
+                THEN TRUE 
+                ELSE FALSE 
+            END AS is_current
+        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_housing"
+    ),
+    current_records AS (
+        SELECT *
+        FROM ranked_listings
+        WHERE is_current = TRUE
+    )
+    INSERT INTO schema_marketplace."saudi_real_estate_housing_enriched" (
+        listing_id,
+        total_housings,
+        residential_housings,
+        non_residential_housings,
+        owned_housings,
+        rented_housings,
+        provided_housings,
+        other_residential_housings,
+        public_housing,
+        work_camps,
+        commercial_housings,
+        other_housings,
+        density_sum,
+        housing_analysis_date,
+        is_current
+    )
+    SELECT 
+        listing_id,
+        total_housings,
+        residential_housings,
+        non_residential_housings,
+        owned_housings,
+        rented_housings,
+        provided_housings,
+        other_residential_housings,
+        public_housing,
+        work_camps,
+        commercial_housings,
+        other_housings,
+        density_sum,
+        housing_analysis_date,
+        is_current
+    FROM current_records;
+    """
+
+
 
 def create_enriched_traffic_table():
     return """
@@ -337,24 +539,49 @@ def create_enriched_traffic_table():
 
     TRUNCATE TABLE schema_marketplace."saudi_real_estate_traffic_enriched";
 
+WITH ranked_traffic AS (
+    -- First CTE: assign is_current based on latest traffic_analysis_date per listing_id
+    SELECT 
+        te.listing_id,
+        te.url,
+        te.latitude,
+        te.longitude,
+        te.city,
+        te.direction_id,
+        te.category,
+        te.traffic_score,
+        te.traffic_storefront_score,
+        te.traffic_area_score,
+        te.traffic_screenshot_filename,
+        te.traffic_analysis_date,
+        CASE 
+            WHEN ROW_NUMBER() OVER (
+                PARTITION BY te.listing_id
+                ORDER BY COALESCE(te.traffic_analysis_date, '1900-01-01') DESC
+            ) = 1 
+            THEN TRUE 
+            ELSE FALSE 
+        END AS is_current
+    FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_traffic" te
+    ),
+    current_only AS (
+        SELECT *
+        FROM ranked_traffic
+        WHERE is_current = true
+    )
+    -- Final INSERT using the filtered CTE
     INSERT INTO schema_marketplace."saudi_real_estate_traffic_enriched" (
         listing_id, url, latitude, longitude, city, direction_id, category,
         traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename,
         traffic_analysis_date, is_current
     )
     SELECT 
-        te.listing_id, te.url, te.latitude, te.longitude, te.city, te.direction_id, te.category,
-        te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
-        te.traffic_analysis_date,
-    -- mark latest per listing_id as is_current = true based on traffic_analysis_date
-    CASE WHEN ROW_NUMBER() OVER (
-        PARTITION BY te.listing_id
-        ORDER BY COALESCE(te.traffic_analysis_date, '1900-01-01') DESC
-    ) = 1 THEN TRUE ELSE FALSE END AS is_current
-
-    FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_traffic" te
-    where te.is_current = true
+        listing_id, url, latitude, longitude, city, direction_id, category,
+        traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename,
+        traffic_analysis_date, is_current
+    FROM current_only;
     """
+
 
 def historic_to_saudi_real_estate():
     return """
@@ -383,6 +610,26 @@ def historic_to_saudi_real_estate():
         percentage_age_above_45 REAL,
         percentage_age_above_50 REAL,
         demographics_analysis_date TEXT,
+        -- housing columns
+        total_housings BIGINT,
+        residential_housings BIGINT,
+        non_residential_housings BIGINT,
+        owned_housings BIGINT,
+        rented_housings BIGINT,
+        provided_housings BIGINT,
+        other_residential_housings BIGINT,
+        public_housing BIGINT,
+        work_camps BIGINT,
+        commercial_housings BIGINT,
+        other_housings BIGINT,
+        housing_density_sum REAL,
+        housing_analysis_date TEXT,
+        -- household columns
+        total_households BIGINT,
+        avg_household_size REAL,
+        median_household_size REAL,
+        household_density_sum REAL,
+        household_analysis_date TEXT,
         traffic_score REAL,
         traffic_storefront_score REAL,
         traffic_area_score REAL,
@@ -401,18 +648,32 @@ def historic_to_saudi_real_estate():
     merged_enriched AS (
         SELECT 
             cl.listing_id, cl.url, cl.city, cl.price, cl.latitude, cl.longitude, cl.category,
-            red.direction_id, red.total_population, red.avg_density,
-            red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
-            red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
-            red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date,
-            te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
-            te.traffic_analysis_date
+        red.direction_id, red.total_population, red.avg_density,
+        red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
+        red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
+        red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date,
+        te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
+        te.traffic_analysis_date,
+        -- housing fields (aliased)
+        he.total_housings, he.residential_housings, he.non_residential_housings, he.owned_housings,
+        he.rented_housings, he.provided_housings, he.other_residential_housings, he.public_housing,
+        he.work_camps, he.commercial_housings, he.other_housings, he.density_sum AS housing_density_sum,
+        he.housing_analysis_date,
+        -- household fields (aliased)
+        heh.total_households, heh.avg_household_size, heh.median_household_size, heh.density_sum AS household_density_sum,
+        heh.household_analysis_date
         FROM current_listings cl
 
         LEFT JOIN schema_marketplace.saudi_real_estate_demographic_enriched red
             ON cl.listing_id = red.listing_id
         LEFT JOIN schema_marketplace.saudi_real_estate_traffic_enriched te ON 
             cl.listing_id = te.listing_id
+        -- left join housing
+        LEFT JOIN schema_marketplace.saudi_real_estate_housing_enriched he ON
+            he.listing_id = cl.listing_id
+        -- left join household
+        LEFT JOIN schema_marketplace.saudi_real_estate_household_enriched heh ON
+            heh.listing_id = cl.listing_id
         
     )
     INSERT INTO schema_marketplace.saudi_real_estate (
@@ -421,6 +682,12 @@ def historic_to_saudi_real_estate():
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
         percentage_age_above_50, demographics_analysis_date,
+        -- housing columns
+        total_housings, residential_housings, non_residential_housings, owned_housings,
+        rented_housings, provided_housings, other_residential_housings, public_housing,
+        work_camps, commercial_housings, other_housings, housing_density_sum, housing_analysis_date,
+        -- household columns
+        total_households, avg_household_size, median_household_size, household_density_sum, household_analysis_date,
         traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename,
         traffic_analysis_date
     )
@@ -430,6 +697,12 @@ def historic_to_saudi_real_estate():
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
         percentage_age_above_50, demographics_analysis_date,
+        -- housing values
+        total_housings, residential_housings, non_residential_housings, owned_housings,
+        rented_housings, provided_housings, other_residential_housings, public_housing,
+        work_camps, commercial_housings, other_housings, housing_density_sum, housing_analysis_date,
+        -- household values
+        total_households, avg_household_size, median_household_size, household_density_sum, household_analysis_date,
         traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename,
         traffic_analysis_date
     FROM merged_enriched;

@@ -3,7 +3,7 @@ import json
 from typing import Dict
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import os
+# os is not required here; filesystem access is handled by callers
 
 def pct_above(age, avg_median_age):
     diff = age - avg_median_age
@@ -170,7 +170,6 @@ def fetch_household_from_db(center_lat: float, center_lng: float, radius_km: flo
             "avg_household_size": 0.0,
             "median_household_size": 0.0,
             "density_sum": 0.0,
-            "features_count": 0,
         }
 
     # Aggregate
@@ -184,6 +183,87 @@ def fetch_household_from_db(center_lat: float, center_lng: float, radius_km: flo
         "avg_household_size": round(sum(avg_sizes) / len(avg_sizes), 2) if avg_sizes else 0.0,
         "median_household_size": round(sum(median_sizes) / len(median_sizes), 2) if median_sizes else 0.0,
         "density_sum": round(sum(densities), 2),
-        "features_count": len(results),
+    }
+    return aggregated
+
+
+def fetch_housing_from_db(center_lat: float, center_lng: float, radius_km: float = 1) -> Dict:
+    """
+    Query Postgres housing_all_features_v12 for features within a square bbox around the center point.
+    Returns aggregated housing statistics.
+
+    Returns dict with keys for totals and averages matching the table columns.
+    """
+    cfg = _read_db_config()
+    conn = None
+    bbox = generate_bbox(center_lat, center_lng, radius_km)
+    sql = f"""
+    SELECT "Total_housings", "Residential_housings", "Non_Residential_housings", "Owned_housings",
+           "Rented_housings", "Provided_housings", "Other_Residential_housings", "Public_Housing",
+           "Work_Camps", "Commercial_housings", "Other_housings", density
+    FROM schema_marketplace.housing_all_features_v12
+    WHERE geometry && ST_MakeEnvelope({bbox['bottom_lng']}, {bbox['bottom_lat']}, {bbox['top_lng']}, {bbox['top_lat']}, 4326)
+    """
+    rows = []
+    try:
+        conn = psycopg2.connect(
+            dbname=cfg.get("dbname"),
+            user=cfg.get("user"),
+            password=cfg.get("password"),
+            host=cfg.get("host"),
+            port=cfg.get("port"),
+        )
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+    finally:
+        if conn:
+            conn.close()
+
+    if not rows:
+        return {
+            "total_housings": 0,
+            "residential_housings": 0,
+            "non_residential_housings": 0,
+            "owned_housings": 0,
+            "rented_housings": 0,
+            "provided_housings": 0,
+            "other_residential_housings": 0,
+            "public_housing": 0,
+            "work_camps": 0,
+            "commercial_housings": 0,
+            "other_housings": 0,
+            "density_sum": 0.0,
+        }
+
+    def safe_get(row, key):
+        return row.get(key, 0) or 0
+
+    total = sum(safe_get(r, "Total_housings") for r in rows)
+    residential = sum(safe_get(r, "Residential_housings") for r in rows)
+    non_res = sum(safe_get(r, "Non_Residential_housings") for r in rows)
+    owned = sum(safe_get(r, "Owned_housings") for r in rows)
+    rented = sum(safe_get(r, "Rented_housings") for r in rows)
+    provided = sum(safe_get(r, "Provided_housings") for r in rows)
+    other_res = sum(safe_get(r, "Other_Residential_housings") for r in rows)
+    public = sum(safe_get(r, "Public_Housing") for r in rows)
+    work_camps = sum(safe_get(r, "Work_Camps") for r in rows)
+    commercial = sum(safe_get(r, "Commercial_housings") for r in rows)
+    other = sum(safe_get(r, "Other_housings") for r in rows)
+    density_sum = round(sum(safe_get(r, "density") for r in rows), 2)
+
+    aggregated = {
+        "total_housings": total,
+        "residential_housings": residential,
+        "non_residential_housings": non_res,
+        "owned_housings": owned,
+        "rented_housings": rented,
+        "provided_housings": provided,
+        "other_residential_housings": other_res,
+        "public_housing": public,
+        "work_camps": work_camps,
+        "commercial_housings": commercial,
+        "other_housings": other,
+        "density_sum": density_sum,
     }
     return aggregated
