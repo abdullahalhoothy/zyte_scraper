@@ -111,12 +111,6 @@ def fetch_demographics(center_lat, center_lng, user_id, id_token, radius_km=1):
     return processed
 
 
-if __name__ == "__main__":
-    # latitude	longitude
-    # 24.784202	46.747732
-   user_id, id_token = login_and_get_user()
-   demographics = fetch_demographics(24.784202, 46.747732, user_id, id_token)
-   print(demographics)
 
 
 def _read_db_config():
@@ -267,3 +261,13 @@ def fetch_housing_from_db(center_lat: float, center_lng: float, radius_km: float
         "density_sum": density_sum,
     }
     return aggregated
+
+
+
+if __name__ == "__main__":
+    # 6051728
+    # latitude	longitude
+    # 24.740278	46.67195
+   user_id, id_token = login_and_get_user()
+   demographics = fetch_demographics(24.740278, 46.67195, user_id, id_token)
+   print(demographics)
