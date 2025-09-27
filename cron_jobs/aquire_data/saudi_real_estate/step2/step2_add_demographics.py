@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
 def _read_db_config():
     """Read DB credentials from cron_jobs/secrets_database.json -> dev-s-locator."""
-    secrets_path = r"cron_jobs\secrets_database.json"
+    secrets_path = r"cron_jobs/secrets_database.json"
     with open(secrets_path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     # Use dev-s-locator by default (matches local/dev in repo)
