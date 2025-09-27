@@ -9,6 +9,7 @@ from step2_add_demographics import login_and_get_user
 from step2_add_demographics import fetch_household_from_db
 from step2_add_demographics import fetch_housing_from_db
 from step2_extract_listing_id import add_listing_ids_to_csv
+from step2_scrapy_transform_to_csv import process_real_estate_data
 
 # --- Centralized column definitions ---
 INPUT_COLUMNS = [
@@ -555,7 +556,7 @@ def process_city_housing(csv_path: str, batch_size: int, city=CITY_FILTER):
     return output_path
 
 
-# process_real_estate_data()
+process_real_estate_data()
 current_dir = os.path.dirname(os.path.abspath(__file__))
 csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
