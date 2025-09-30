@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: traffic_api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - selenium
+    environment:
+      - SQLITE_DB_FILE=/app/data/traffic.db
+      - SELENIUM_URL=http://localhost:4444/wd/hub
+      - JWT_SECRET=${JWT_SECRET:-jwt_secret}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-password123}
+      - RATE_LIMIT=${RATE_LIMIT:-10/minute}
+      - SELENIUM_PROXY=${SELENIUM_PROXY:-}
+    volumes:
+      - .:/app
+      - ./static:/app/static
+      - ./data:/app/data
+
+  selenium:
+    image: selenium/standalone-chrome:124.0
+    container_name: selenium_chrome
+    shm_size: 2g
+    ports:
+      - "4444:4444"
