@@ -11,27 +11,33 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Docker
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Build and run API with docker-compose
+      - name: Build and run API with Docker Compose
         working-directory: traffic_api
         run: |
-          docker-compose down
-          docker-compose build --no-cache
-          docker-compose up -d
+          docker compose down || true
+          docker compose build --no-cache
+          docker compose up -d
+
+      - name: Install jq (for parsing ngrok JSON)
+        run: sudo apt update && sudo apt install -y jq
 
       - name: Install ngrok
         run: |
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update && sudo apt install ngrok -y
+          sudo apt update && sudo apt install -y ngrok
 
       - name: Start ngrok and get public URL
         id: ngrok
         run: |
+          # Start ngrok in background
           ngrok http 8000 --log=stdout > ngrok.log &
+          # Wait for ngrok to start
           sleep 5
+          # Get public URL
           URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
           echo "ngrok_url=$URL" >> $GITHUB_OUTPUT
 
