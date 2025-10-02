@@ -62,7 +62,7 @@ jobs:
               echo "🐳 Docker not found. Installing Docker..."
               # curl -fsSL https://get.docker.com -o get-docker.sh
               # sudo sh get-docker.sh
-              apt install docker
+              apt install -y -qq docker
               usermod -aG docker $USER
               # rm get-docker.sh
               echo "✅ Docker installed successfully"
@@ -92,7 +92,7 @@ jobs:
               # Create symlink for docker compose (v2)
               # sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
               
-              apt install docker-compose
+              apt install -y -qq docker-compose
 
               echo "✅ Docker Compose installed successfully"
               docker-compose --version
