@@ -1,8 +1,8 @@
 name: Deploy Traffic API to VPS
 
 on:
-  # push:
-  #   branches: [ main, master ]
+  push:
+    branches: [ main, master ]
   workflow_dispatch:
 
 env:
@@ -15,6 +15,38 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install system dependencies on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            echo "🛠️ Installing system dependencies..."
+            
+            # Update package list
+            sudo apt-get update -qq
+
+            # Install essential dependencies
+            sudo apt-get install -y -qq \
+              curl \
+              wget \
+              git \
+              apt-transport-https \
+              ca-certificates \
+              gnupg \
+              lsb-release \
+              software-properties-common \
+              uidmap
+
+            # Verify installations
+            echo "✅ Dependencies installed:"
+            curl --version | head -1
+            wget --version | head -1
+            git --version
+            echo "System dependencies installation completed"
 
       - name: Check and install Docker on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -96,19 +128,19 @@ jobs:
           script: |
             cd ${{ env.PROJECT_DIR }}
             
-            # Create .env file if it doesn't exist
-            if [ ! -f .env ]; then
-              cat > .env << EOF
-              JWT_SECRET=${{ secrets.JWT_SECRET }}
-              ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-              RATE_LIMIT=${{ secrets.RATE_LIMIT || '10/minute' }}
-              SELENIUM_PROXY=${{ secrets.SELENIUM_PROXY || '' }}
-              ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS || 'localhost,127.0.0.1' }}
-              EOF
-              echo "✅ Created .env file"
-            else
-              echo "✅ .env file already exists"
-            fi
+            # Create .env file with proper escaping
+            cat > .env << 'ENDFILE'
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+            RATE_LIMIT=${{ secrets.RATE_LIMIT || '10/minute' }}
+            SELENIUM_PROXY=${{ secrets.SELENIUM_PROXY || '' }}
+            ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS || 'localhost,127.0.0.1' }}
+            ENDFILE
+            
+            echo "✅ Created/updated .env file"
+            # Show first few chars for verification (without exposing secrets)
+            echo "📄 .env file preview (first line):"
+            head -n 1 .env | sed 's/./*/g'
 
       - name: Deploy application
         uses: appleboy/ssh-action@v1.0.3
@@ -124,11 +156,11 @@ jobs:
             # Try both docker-compose and docker compose for compatibility
             docker-compose down --remove-orphans || docker compose down --remove-orphans
             
-            echo "🏗️ Building new images..."
-            docker-compose build --no-cache --pull || docker compose build --no-cache --pull
+            echo "🏗️ Pulling latest images..."
+            docker-compose pull || docker compose pull
             
             echo "🚀 Starting services..."
-            docker-compose up -d || docker compose up -d
+            docker-compose up -d --build || docker compose up -d --build
             
             echo "⏳ Waiting for services to be healthy..."
             sleep 30
@@ -146,10 +178,13 @@ jobs:
             cd ${{ env.PROJECT_DIR }}
             
             # Use whichever compose command works
-            COMPOSE_CMD="docker-compose"
-            if ! command -v docker-compose &> /dev/null; then
+            if command -v docker-compose &> /dev/null; then
+              COMPOSE_CMD="docker-compose"
+            else
               COMPOSE_CMD="docker compose"
             fi
+            
+            echo "Using compose command: $COMPOSE_CMD"
             
             # Check if API container is running
             API_STATUS=$($COMPOSE_CMD ps api | grep -c "Up" || true)
@@ -171,17 +206,19 @@ jobs:
               exit 1
             fi
             
-            # Test API health endpoint
+            # Test API health endpoint with retries
             echo "🧪 Testing API connectivity..."
-            if curl -f -s http://localhost:8000/health > /dev/null || 
-               curl -f -s http://localhost:8000/docs > /dev/null || 
-               curl -f -s http://localhost:8000/ > /dev/null; then
-              echo "✅ API is responding"
-            else
-              echo "⚠️  API health check failed, but deployment completed"
-              echo "Checking API logs:"
-              $COMPOSE_CMD logs api --tail=10
-            fi
+            for i in {1..5}; do
+              if curl -f -s http://localhost:8000/health > /dev/null || 
+                 curl -f -s http://localhost:8000/docs > /dev/null || 
+                 curl -f -s http://localhost:8000/ > /dev/null; then
+                echo "✅ API is responding (attempt $i)"
+                break
+              else
+                echo "⏳ API not ready yet (attempt $i), waiting..."
+                sleep 10
+              fi
+            done
 
       - name: Clean up old images
         uses: appleboy/ssh-action@v1.0.3
@@ -191,15 +228,15 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             echo "🧹 Cleaning up unused Docker resources..."
-            docker image prune -f
-            docker system prune -f --volumes
+            docker image prune -f || true
+            docker system prune -f --volumes || true
 
       - name: Send deployment notification
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
             echo "🎉 Deployment completed successfully!"
-            # Add success notification here
+            # Add success notification here (Slack, Discord, etc.)
           else
             echo "❌ Deployment failed!"
             # Add failure notification here
