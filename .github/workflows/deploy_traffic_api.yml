@@ -152,6 +152,8 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            cd ${{ env.PROJECT_DIR }}
+
             echo "🔍 Checking available disk space..."
             df -h .
             
