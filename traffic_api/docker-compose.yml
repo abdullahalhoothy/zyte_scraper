@@ -7,10 +7,11 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - selenium
+      - selenium-hub
+      - chrome
     environment:
       - SQLITE_DB_FILE=/app/data/traffic.db
-      - SELENIUM_URL=http://localhost:4444/wd/hub
+      - SELENIUM_URL=http://selenium-hub:4444/wd/hub
       - JWT_SECRET=${JWT_SECRET:-jwt_secret}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-password123}
       - RATE_LIMIT=${RATE_LIMIT:-10/minute}
@@ -20,9 +21,24 @@ services:
       - ./static:/app/static
       - ./data:/app/data
 
-  selenium:
-    image: selenium/standalone-chrome:124.0
-    container_name: selenium_chrome
-    shm_size: 2g
+  selenium-hub:
+    image: selenium/hub:4.35.0
+    container_name: selenium_hub
     ports:
       - "4444:4444"
+    environment:
+      - GRID_MAX_SESSION=4   # Maximum concurrent sessions the hub can handle
+
+  chrome:
+    image: selenium/node-chrome:124.0
+    # container_name: selenium_node_chrome
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=1  # Each node can handle 1 browser session
+    shm_size: 512m
+    deploy:
+      replicas: 4  # Run 4 Chrome nodes
