@@ -1,8 +1,8 @@
 name: Deploy Traffic API to VPS
 
 on:
-  push:
-    branches: [ main, master ]
+  # push:
+  #   branches: [ main, master ]
   workflow_dispatch:
 
 env:
@@ -27,10 +27,10 @@ jobs:
             echo "🛠️ Installing system dependencies..."
             
             # Update package list
-            sudo apt-get update -qq
+            apt update -qq
 
             # Install essential dependencies
-            sudo apt-get install -y -qq \
+            apt install -y -qq \
               curl \
               wget \
               git \
@@ -60,10 +60,11 @@ jobs:
             
             if ! command -v docker &> /dev/null; then
               echo "🐳 Docker not found. Installing Docker..."
-              curl -fsSL https://get.docker.com -o get-docker.sh
-              sudo sh get-docker.sh
-              sudo usermod -aG docker $USER
-              rm get-docker.sh
+              # curl -fsSL https://get.docker.com -o get-docker.sh
+              # sudo sh get-docker.sh
+              apt install docker
+              usermod -aG docker $USER
+              # rm get-docker.sh
               echo "✅ Docker installed successfully"
             else
               echo "✅ Docker is already installed"
@@ -84,13 +85,15 @@ jobs:
               echo "🐳 Docker Compose not found. Installing Docker Compose..."
               
               # Install Docker Compose v2 (recommended)
-              DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-              sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              sudo chmod +x /usr/local/bin/docker-compose
-              
+              # DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+              # sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              # sudo chmod +x /usr/local/bin/docker-compose
+
               # Create symlink for docker compose (v2)
-              sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+              # sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
               
+              apt install docker-compose
+
               echo "✅ Docker Compose installed successfully"
               docker-compose --version
             else
@@ -149,24 +152,35 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            set -e
-            cd ${{ env.PROJECT_DIR }}
+            echo "🔍 Checking available disk space..."
+            df -h .
             
             echo "🔄 Stopping existing containers..."
             # Try both docker-compose and docker compose for compatibility
-            docker-compose down --remove-orphans || docker compose down --remove-orphans
+            docker-compose down --remove-orphans 2>/dev/null || docker compose down --remove-orphans
             
-            echo "🏗️ Pulling latest images..."
-            docker-compose pull || docker compose pull
+            echo "🏗️ Pulling latest base images..."
+            docker-compose pull --quiet 2>/dev/null || docker compose pull --quiet
             
-            echo "🚀 Starting services..."
-            docker-compose up -d --build || docker compose up -d --build
+            echo "🚀 Building and starting services..."
+            docker-compose up -d --build 2>/dev/null || docker compose up -d --build
             
-            echo "⏳ Waiting for services to be healthy..."
-            sleep 30
+            echo "⏳ Waiting for services to initialize..."
+            sleep 10
             
-            echo "🔍 Checking service status..."
-            docker-compose ps || docker compose ps
+            # Wait for services to be ready with timeout
+            echo "🔍 Waiting for services to be healthy..."
+            for i in {1..6}; do
+              if docker-compose ps | grep -q "Up" || docker compose ps | grep -q "Up"; then
+                echo "✅ Services are starting up..."
+                break
+              fi
+              echo "⏳ Still waiting for services... ($i/6)"
+              sleep 10
+            done
+            
+            echo "📊 Final service status:"
+            docker-compose ps 2>/dev/null || docker compose ps
 
       - name: Verify deployment
         uses: appleboy/ssh-action@v1.0.3
