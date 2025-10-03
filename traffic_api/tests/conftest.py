@@ -3,12 +3,14 @@
 
 import os
 import sys
-from hashlib import md5
+
+from sqlalchemy.util import md5_hex
 
 # Add the parent directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
+
 from db import Base, SessionLocal, engine
 from models_db import User
 
@@ -21,7 +23,7 @@ def setup_db():
     # Insert default admin if not exists
     db = SessionLocal()
     if not db.query(User).filter_by(username="admin").first():
-        db.add(User(username="admin", hashed_password=md5(b"password123").hexdigest()))
+        db.add(User(username="admin", hashed_password=md5_hex("password123")))
         db.commit()
     db.close()
 
