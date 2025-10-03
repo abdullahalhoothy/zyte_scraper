@@ -11,12 +11,9 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from sqlalchemy.util import md5_hex
 
+from config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
 from db import get_db
 from models_db import User
-
-SECRET_KEY = os.getenv("JWT_SECRET", "jwt_secret")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -28,9 +25,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def authenticate_user(username: str, password: str, db: Session) -> Optional[User]:
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        return None
+        return
     if not verify_password(password, user.hashed_password):
-        return None
+        return
     return user
 
 

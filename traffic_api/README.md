@@ -1,15 +1,81 @@
-# Traffic API
+# Traffic Analyzer API
 
-Dockerized FastAPI service that runs Google Maps traffic analysis using Selenium.
+A FastAPI-based service that analyzes Google Maps traffic using Selenium Grid.  
+Supports **batch requests** (up to 20 locations) with a **job queue** for scalable performance.
 
-## Description
+## Features
+- JWT authentication (`/token`)
+- Submit multiple locations per batch (`/analyze-batch`)
+- Poll job status (`/job/{id}`)
+- Cancel Job (`/job/{id}/cancel`)
+- Results include traffic score, method, screenshot URL
+- Queue system ensures VPS stability under load
+- SQLite3 database logging, and Caching
+- Configurable concurrency
+- Tests include:
+   - Authentication
+   - Batch submission
+   - Polling until done
+   - Order preservation
+   - Mocked parallel jobs
 
-Added a new FastAPI endpoint to serve traffic data. The route accepts relevant parameters, validates inputs, and returns structured JSON with traffic details. Basic error handling is included to ensure robustness. This lays the groundwork for integrating real-time traffic info into the app and can be extended with caching or auth in future iterations. Manual and unit tests confirm expected behavior.
+### Requirements
+- Python 3.12+
+- Docker & Docker Compose
+- Selenium Grid (standalone Chrome container or external)
 
-## Quick start (local + docker)
 
-1. Copy repo, create `.env` if needed.
-2. Run:
-   ```bash
-   docker-compose up --build
-   ```
+### Setup & Test Localy
+
+#### Setup Python Env & Tests
+```bash
+python3 -m venv .venv
+
+source .venv/bin/active
+
+pip install -r requirements.txt
+
+pytest -v --disable-warnings
+```
+
+#### Setup Selenium Grid Server & API end-point Using Docker
+```bash
+docker-compose up --build
+
+docker exec -it selenium_hub wget -q -O - http://localhost:4444/status
+```
+
+### Run with Docker Compose
+```bash
+docker-compose up --build
+```
+
+### Authentication
+Default admin user:
+   - username: admin
+   - password: password123
+   (Change via ADMIN_PASSWORD env var.)
+
+## Deployment
+
+#### GitHub Actions CI/CD included:
+   - Runs tests on PR
+   - Deploys to VPS with Docker Compose
+
+#### Secrets required:
+   - `VPS_HOST`
+   - `VPS_USERNAME`
+   - `VPS_SSH_KEY`
+
+
+## Configuration
+
+#### Environment variables:
+
+   - `JWT_SECRET` → JWT signing key
+   - `ADMIN_PASSWORD` → initial admin password
+   - `RATE_LIMIT` → e.g. 10/minute
+   - `JOBQUEUE_MAX_JOBS` → concurrent jobs (default: 2)
+   - `JOBQUEUE_PER_JOB_CONCURRENCY` → Selenium workers per job (default: 3)
+   - `SQLITE_DB_FILE` → SQLite file path (default: traffic.db)
+

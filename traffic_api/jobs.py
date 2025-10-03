@@ -19,8 +19,7 @@ from tenacity import (
 )
 
 
-# Job statuses
-class StatusEnum(Enum):
+class JobStatusEnum(Enum):
     CANCELED = "canceled"
     PENDING = "pending"
     RUNNING = "running"
@@ -87,11 +86,11 @@ class JobQueue:
         # job_id = str(uuid.uuid4())
         job_id = JobID.random_string()
         job_record = {
-            "status": StatusEnum.PENDING,
+            "status": JobStatusEnum.PENDING,
             "payload": payload,
             "result": {"count": 0, "results": []},
             "error": None,
-            "remaining": None,
+            "remaining": 0,
             "created_at": time.time(),
             "updated_at": time.time(),
             "cancel_requested": False,
@@ -114,11 +113,15 @@ class JobQueue:
         if not job:
             return None
 
-        if job["status"] in (StatusEnum.DONE, StatusEnum.FAILED, StatusEnum.CANCELED):
+        if job["status"] in (
+            JobStatusEnum.DONE,
+            JobStatusEnum.FAILED,
+            JobStatusEnum.CANCELED,
+        ):
             return job
 
         job["cancel_requested"] = True
-        job["status"] = StatusEnum.CANCELED
+        job["status"] = JobStatusEnum.CANCELED
         job["updated_at"] = time.time()
         return job
 
@@ -131,7 +134,7 @@ class JobQueue:
                 self._queue.task_done()
                 continue
 
-            job["status"] = StatusEnum.RUNNING
+            job["status"] = JobStatusEnum.RUNNING
             job["updated_at"] = time.time()
 
             locations = job["payload"].get("locations", [])[:20]  # enforce limit
@@ -189,13 +192,13 @@ class JobQueue:
 
                 if not job.get("cancel_requested"):
                     job["result"].update({"count": len(locations), "results": results})
-                    job["status"] = StatusEnum.DONE
+                    job["status"] = JobStatusEnum.DONE
 
                 job["updated_at"] = time.time()
 
             except Exception as e:
                 job["error"] = str(e)
-                job["status"] = StatusEnum.FAILED
+                job["status"] = JobStatusEnum.FAILED
                 job["updated_at"] = time.time()
 
             finally:
