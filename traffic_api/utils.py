@@ -23,8 +23,8 @@ async def lifespan(app: FastAPI):
     yield
 
 
-def update_job(job_id: str, user_id: int, **kwargs) -> None:
-    db = next(get_db())
+def update_job(db, job_id: str, user_id: int, **kwargs) -> None:
+    # db = next(get_db())
 
     try:
         stmt = (
@@ -38,8 +38,8 @@ def update_job(job_id: str, user_id: int, **kwargs) -> None:
         logger.warning(f"DB log failed to update job {job_id}: {e}")
 
 
-def get_job_record(job_id: str, user_id: int) -> dict | None:
-    db = next(get_db())
+def get_job_record(db, job_id: str, user_id: int) -> dict | None:
+    # db = next(get_db())
 
     try:
         job_record = (

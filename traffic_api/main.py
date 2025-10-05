@@ -129,7 +129,7 @@ async def analyze_batch(
 ):
     """
     Submit a batch (up to 20 locations). Returns job_id immediately.
-    Client must poll /job/{job_id} to get status or results.
+    Client must poll /job/{job_uid} to get status or results.
     """
     if not payload.locations:
         raise HTTPException(status_code=400, detail="No locations provided")
@@ -151,49 +151,49 @@ async def analyze_batch(
         "request_base_url": str(request.base_url),
     }
 
-    job_id = job_queue.submit(job_payload)
+    job_uid = job_queue.submit(job_payload)
     status = JobStatusEnum.PENDING.value
 
     try:
-        job = Job(uuid=job_id, status=status, user_id=user.id)
+        job = Job(uuid=job_uid, status=status, user_id=user.id)
         db.add(job)
         db.commit()
     except Exception as e:
-        logger.warning(f"DB log failed to create job {job_id}: {e}")
+        logger.warning(f"DB log failed to create job {job_uid}: {e}")
 
-    return {"job_id": job_id, "status": status}
+    return {"job_id": job_uid, "status": status}
 
 
-@app.get("/job/{job_id}")
+@app.get("/job/{job_uid}")
 async def get_job(
-    job_id: str | None, user=Depends(get_current_user), db: Session = Depends(get_db)
+    job_uid: str | None, user=Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     Return the job status if still running,
     or full result when job is completed.
     """
 
-    job = job_queue.get(job_id)
+    job = job_queue.get(job_uid)
     if not job:
-        result = get_job_record(job_id, user.id)
+        result = get_job_record(db, job_uid, user.id)
         if result:
             return result
         raise HTTPException(status_code=404, detail="Job not found")
 
     status = job.get("status")
     remaining = job.get("remaining", 0)
-    response = {"job_id": job_id, "status": status.value}
+    response = {"job_id": job_uid, "status": status.value}
 
     if status in (JobStatusEnum.PENDING, JobStatusEnum.RUNNING):
         response["remaining"] = remaining
         return response
 
     if status == JobStatusEnum.FAILED:
-        job_queue.remove(job_id)
+        job_queue.remove(job_uid)
         error = job.get("error")
         response["error"] = error
         update_job(
-            job_id, user.id, status=status.value, remaining=remaining, error=error
+            db, job_uid, user.id, status=status.value, remaining=remaining, error=error
         )
         return response
 
@@ -201,6 +201,8 @@ async def get_job(
     if status in (JobStatusEnum.DONE, JobStatusEnum.CANCELED) and job.get("result"):
         if not job.get("_logged_to_db"):
             try:
+                job_id = db.query(Job).filter(Job.uuid == job_uid).first().id
+
                 results = job["result"].get("results", [])
                 payload_locations = job["payload"].get("locations", [])
                 for i, res in enumerate(results):
@@ -218,16 +220,17 @@ async def get_job(
                 db.refresh(log)
                 job["_logged_to_db"] = True
             except Exception as e:
-                logger.warning(f"DB log failed for job {job_id}: {e}")
+                logger.warning(f"DB log failed for job {job_uid}: {e}")
 
-    job_queue.remove(job_id)
+    job_queue.remove(job_uid)
 
     response["remaining"] = remaining
     response["result"] = job.get("result")
     response["error"] = job.get("error")
 
     update_job(
-        job_id,
+        db,
+        job_uid,
         user.id,
         status=status.value,
         remaining=remaining,
@@ -237,9 +240,9 @@ async def get_job(
     return response
 
 
-@app.post("/job/{job_id}/cancel")
-async def cancel_job(job_id: str, user=Depends(get_current_user)):
-    job = job_queue.cancel(job_id)
+@app.post("/job/{job_uid}/cancel")
+async def cancel_job(job_uid: str, user=Depends(get_current_user), db=Depends(get_db)):
+    job = job_queue.cancel(job_uid)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -247,10 +250,10 @@ async def cancel_job(job_id: str, user=Depends(get_current_user)):
     remaining = job.get("remaining", 0)
     error = job.get("error")
 
-    update_job(job_id, user.id, status=status, remaining=remaining, error=error)
+    update_job(db, job_uid, user.id, status=status, remaining=remaining, error=error)
 
     return {
-        "job_id": job_id,
+        "job_id": job_uid,
         "status": status,
         "remaining": remaining,
         "result": job.get("result"),  # partial results included
