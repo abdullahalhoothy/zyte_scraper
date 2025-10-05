@@ -4,22 +4,6 @@
 import os
 from datetime import timedelta
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.staticfiles import StaticFiles
-from slowapi import Limiter
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
-from sqlalchemy.orm import Session
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
-
 from auth import authenticate_user, create_access_token, get_current_user
 from config import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -29,10 +13,25 @@ from config import (
     logger,
 )
 from db import get_db
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from jobs import JobQueue, JobStatusEnum
 from models import MultiTrafficRequest, Token
 from models_db import Job, TrafficLog
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 from utils import get_job_record, lifespan, update_job
 
 # FastAPI app
@@ -174,7 +173,7 @@ async def get_job(
 
     job = job_queue.get(job_id)
     if not job:
-        result = get_job_record()
+        result = get_job_record(job_id, user.id)
         if result:
             return result
         raise HTTPException(status_code=404, detail="Job not found")
