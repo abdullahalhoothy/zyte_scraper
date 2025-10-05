@@ -122,7 +122,10 @@ async def login(
 @app.post("/analyze-points")
 @limiter.limit(RATE)
 async def analyze_batch(
-    request: Request, payload: MultiTrafficRequest, user=Depends(get_current_user)
+    request: Request,
+    payload: MultiTrafficRequest,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Submit a batch (up to 20 locations). Returns job_id immediately.
@@ -152,7 +155,6 @@ async def analyze_batch(
     status = JobStatusEnum.PENDING.value
 
     try:
-        db = next(get_db())
         job = Job(uuid=job_id, status=status, user_id=user.id)
         db.add(job)
         db.commit()
