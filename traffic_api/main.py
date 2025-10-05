@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-import logging
 import os
 from datetime import timedelta
 
@@ -13,7 +12,6 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 from tenacity import (
     retry,
@@ -33,7 +31,7 @@ from config import (
 from db import get_db
 from jobs import JobQueue, JobStatusEnum
 from models import MultiTrafficRequest, Token
-from models_db import TrafficLog, User
+from models_db import Job, TrafficLog
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer
 from utils import get_job_record, lifespan, update_job
 
@@ -155,8 +153,9 @@ async def analyze_batch(
     status = JobStatusEnum.PENDING.value
 
     try:
+        db = next(get_db())
         job = Job(uuid=job_id, status=status, user_id=user.id)
-        db.add(log)
+        db.add(job)
         db.commit()
     except Exception as e:
         logger.warning(f"DB log failed to create job {job_id}: {e}")

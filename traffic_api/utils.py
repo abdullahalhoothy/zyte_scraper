@@ -1,14 +1,15 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
+import os
 from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-from sqlalchemy.util import md5_hex
 
 from config import logger
 from db import Base, engine, get_db
-from models_db import Job, TrafficLog
+from fastapi import FastAPI
+from models_db import Job, TrafficLog, User
+from sqlalchemy import update
+from sqlalchemy.util import md5_hex
 
 
 @asynccontextmanager
