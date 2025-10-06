@@ -8,6 +8,7 @@ Supports **batch requests** (up to 20 locations) with a **job queue** for scalab
 - Submit multiple locations per batch (`/analyze-batch`)
 - Poll job status (`/job/{id}`)
 - Cancel Job (`/job/{id}/cancel`)
+- Health check endpoint to verify Selenium Grid status (`/health`)
 - Results include traffic score, method, screenshot URL
 - Queue system ensures VPS stability under load
 - SQLite3 database logging, and Caching
