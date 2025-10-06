@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_DIR: /opt/traffic_api
+  PROJECT_DIR: /zyte_scraper
+  TRAFFIC_API_DIR: /zyte_scraper/traffic_api
 
 jobs:
   deploy:
@@ -25,7 +26,7 @@ jobs:
           script: |
             set -e
             echo "🛠️ Installing system dependencies..."
-            
+
             # Update package list
             apt update -qq
 
@@ -91,7 +92,7 @@ jobs:
 
               # Create symlink for docker compose (v2)
               # sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
-              
+
               apt install -y -qq docker-compose
 
               echo "✅ Docker Compose installed successfully"
@@ -102,16 +103,16 @@ jobs:
               docker-compose --version || docker compose version
             fi
 
-      - name: Setup project directory on VPS
+      - name: Setup Traffic API project directory on VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            sudo mkdir -p ${{ env.PROJECT_DIR }}/{data,static,logs}
-            sudo chown -R ${{ secrets.VPS_USERNAME }}:${{ secrets.VPS_USERNAME }} ${{ env.PROJECT_DIR }}
-            sudo chmod -R 755 ${{ env.PROJECT_DIR }}
+            mkdir -p ${{ env.TRAFFIC_API_DIR }}/{data,static,logs}
+            chown -R ${{ secrets.VPS_USERNAME }}:${{ secrets.VPS_USERNAME }} ${{ env.PROJECT_DIR }}
+            chmod -R 755 ${{ env.PROJECT_DIR }}
 
       - name: Copy project files to VPS
         uses: appleboy/scp-action@v0.1.3
@@ -119,9 +120,9 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "traffic_api/*"
+          source: "."
           target: ${{ env.PROJECT_DIR }}/
-          strip_components: 1
+          # strip_components: 1
 
       - name: Create environment file on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -130,7 +131,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ${{ env.PROJECT_DIR }}
+            cd ${{ env.TRAFFIC_API_DIR }}
             
             # Create .env file with proper escaping
             cat > .env << 'ENDFILE'
@@ -176,7 +177,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ${{ env.PROJECT_DIR }}
+            cd ${{ env.TRAFFIC_API_DIR }}
 
             echo "🔍 Checking available disk space..."
             df -h .
@@ -215,7 +216,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ${{ env.PROJECT_DIR }}
+            cd ${{ env.TRAFFIC_API_DIR }}
             
             # Use whichever compose command works
             if command -v docker-compose &> /dev/null; then
@@ -249,8 +250,8 @@ jobs:
             # Test API health endpoint with retries
             echo "🧪 Testing API connectivity..."
             for i in {1..5}; do
-              if curl -f -s http://localhost:8000/health > /dev/null || 
-                 curl -f -s http://localhost:8000/docs > /dev/null || 
+              if curl -f -s http://localhost:8000/health > /dev/null ||
+                 curl -f -s http://localhost:8000/docs > /dev/null ||
                  curl -f -s http://localhost:8000/ > /dev/null; then
                 echo "✅ API is responding (attempt $i)"
                 break
