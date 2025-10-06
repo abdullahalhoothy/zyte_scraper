@@ -4,6 +4,23 @@
 import os
 from datetime import timedelta
 
+import requests
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
 from auth import authenticate_user, create_access_token, get_current_user
 from config import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -13,25 +30,10 @@ from config import (
     logger,
 )
 from db import get_db
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.staticfiles import StaticFiles
 from jobs import JobQueue, JobStatusEnum
 from models import MultiTrafficRequest, Token
 from models_db import Job, TrafficLog
-from slowapi import Limiter
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
-from sqlalchemy.orm import Session
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 from utils import get_job_record, lifespan, update_job
 
 # FastAPI app
@@ -66,7 +68,8 @@ def run_single_location_blocking(
     target_time,
     proxy=None,
 ):
-    analyzer = GoogleMapsTrafficAnalyzer(proxy=proxy)
+    selenium_url = os.getenv("SELENIUM_URL", "http://selenium-hub:4444/wd/hub")
+    analyzer = GoogleMapsTrafficAnalyzer(proxy=proxy, selenium_url=selenium_url)
     return analyzer.analyze_location_traffic(
         lat=lat,
         lng=lng,
@@ -257,4 +260,37 @@ async def cancel_job(job_uid: str, user=Depends(get_current_user), db=Depends(ge
         "remaining": remaining,
         "result": job.get("result"),  # partial results included
         "error": error,
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint to verify Selenium Grid status
+    """
+    selenium_status = "unknown"
+    grid_capacity = 0
+    available_sessions = 0
+
+    try:
+        # Check Selenium Grid status
+        response = requests.get("http://selenium-hub:4444/status", timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            selenium_status = "healthy"
+            grid_capacity = data.get("value", {}).get("ready", False)
+            available_sessions = (
+                len(data.get("value", {}).get("nodes", [])) * 4
+            )  # 4 sessions per node
+    except Exception as e:
+        selenium_status = f"unhealthy: {str(e)}"
+
+    return {
+        "api": "healthy",
+        "selenium_grid": selenium_status,
+        "concurrent_capacity": grid_capacity,
+        "available_sessions": available_sessions,
+        "grid_max_sessions": 20,
+        "nodes_configured": 5,
+        "sessions_per_node": 4,
     }
