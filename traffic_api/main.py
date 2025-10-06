@@ -217,7 +217,6 @@ async def get_job(
                     )
                     db.add(log)
                 db.commit()
-                db.refresh(log)
                 job["_logged_to_db"] = True
             except Exception as e:
                 logger.warning(f"DB log failed for job {job_uid}: {e}")
