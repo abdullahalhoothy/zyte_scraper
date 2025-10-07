@@ -54,7 +54,7 @@ docker-compose up --build
 ### Authentication
 Default admin user:
    - username: admin
-   - password: password123
+   - password: 123456
    (Change via ADMIN_PASSWORD env var.)
 
 ## Deployment
@@ -76,7 +76,7 @@ Default admin user:
    - `JWT_SECRET` → JWT signing key
    - `ADMIN_PASSWORD` → initial admin password
    - `RATE_LIMIT` → e.g. 10/minute
-   - `JOBQUEUE_MAX_JOBS` → concurrent jobs (default: 2)
-   - `JOBQUEUE_PER_JOB_CONCURRENCY` → Selenium workers per job (default: 3)
+   - `JOBQUEUE_MAX_JOBS` → concurrent jobs (default: 20)
+   - `JOBQUEUE_PER_JOB_CONCURRENCY` → Selenium workers per job (default: 4)
    - `SQLITE_DB_FILE` → SQLite file path (default: traffic.db)
-
+   - `SELENIUM_PROXY` → selenium proxy
