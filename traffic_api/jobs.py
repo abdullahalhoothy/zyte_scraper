@@ -53,8 +53,8 @@ class JobQueue:
     def __init__(
         self,
         worker_callable: Callable[..., Dict[str, Any]],
-        max_workers: int = 2,
-        per_job_concurrency: int = 3,
+        max_workers: int = 20,
+        per_job_concurrency: int = 4,
     ):
         """
         Args:
