@@ -29,7 +29,7 @@ def get_auth_token() -> str:
                 "ADMIN_USERNAME", "admin"
             ),  # Replace with your username
             "password": os.getenv(
-                "ADMIN_PASSWORD", "password123"
+                "ADMIN_PASSWORD", "123456"
             ),  # Replace with your password
         }
         response = requests.post(LOGIN_ENDPOINT, data=login_data, timeout=30)
