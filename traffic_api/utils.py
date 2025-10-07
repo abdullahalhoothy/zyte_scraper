@@ -4,19 +4,20 @@
 import os
 from contextlib import asynccontextmanager
 
-from config import logger
-from db import Base, engine, get_db
 from fastapi import FastAPI
-from models_db import Job, TrafficLog, User
 from sqlalchemy import update
 from sqlalchemy.util import md5_hex
+
+from config import logger
+from db import Base, engine, get_db
+from models_db import Job, TrafficLog, User
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     db = next(get_db())
-    admin_pw = os.getenv("ADMIN_PASSWORD", "password123").strip()
+    admin_pw = os.getenv("ADMIN_PASSWORD", "123456").strip()
     if not db.query(User).filter_by(username="admin").first():
         db.add(User(username="admin", hashed_password=md5_hex(admin_pw)))
         db.commit()
