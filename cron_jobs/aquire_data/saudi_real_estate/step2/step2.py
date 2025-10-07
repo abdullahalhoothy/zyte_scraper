@@ -3,7 +3,7 @@ import os
 from time import sleep
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from step2_traffic_analysis import get_auth_token, process_traffic_batch, logger
+from step2_traffic_analysis_api import get_auth_token, process_traffic_batch, logger
 from step2_add_demographics import fetch_demographics
 from step2_add_demographics import login_and_get_user
 from step2_add_demographics import fetch_household_from_db
