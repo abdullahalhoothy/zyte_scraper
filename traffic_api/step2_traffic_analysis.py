@@ -54,14 +54,14 @@ class GoogleMapsTrafficAnalyzer:
 
         Args:
             cleanup_driver: Whether to close/quit the webdriver after analysis
-            selenium_url: http://host:port/wd/hub (defaults to SELENIUM_URL env or http://selenium:4444/wd/hub)
+            selenium_url: http://host:port/wd/hub (defaults to SELENIUM_URL env or http://selenium-hub:4444/wd/hub)
             proxy: optional proxy host:port
         """
 
         self.driver = None
         self.cleanup_driver = cleanup_driver
         self.selenium_url = selenium_url or os.getenv(
-            "SELENIUM_URL", "http://selenium:4444/wd/hub"
+            "SELENIUM_URL", "http://selenium-hub:4444/wd/hub"
         )
         self.proxy = proxy or os.getenv("SELENIUM_PROXY", None)
 
