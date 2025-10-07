@@ -139,7 +139,7 @@ jobs:
             ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
             RATE_LIMIT=${{ secrets.RATE_LIMIT || '10/minute' }}
             SELENIUM_PROXY=${{ secrets.SELENIUM_PROXY || '' }}
-            ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS || 'localhost,127.0.0.1' }}
+            ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS || '0.0.0.0,127.0.0.1,localhost' }}
             ENDFILE
             
             echo "✅ Created/updated .env file"
@@ -246,13 +246,21 @@ jobs:
               $COMPOSE_CMD logs selenium-hub
               exit 1
             fi
-            
+
+            # Test Selenium Grid Server
+            if curl -f -s http://${{ secrets.VPS_HOST }}:4444 > /dev/null; then
+              echo "✅ Selenium Grid is responding"
+            else
+              echo "⏳ Selenium Grid not responding"
+              sleep 10
+            fi
+
             # Test API health endpoint with retries
             echo "🧪 Testing API connectivity..."
             for i in {1..5}; do
-              if curl -f -s http://localhost:8000/health > /dev/null ||
-                 curl -f -s http://localhost:8000/docs > /dev/null ||
-                 curl -f -s http://localhost:8000/ > /dev/null; then
+              if curl -f -s http://${{ secrets.VPS_HOST }}:8000/health > /dev/null ||
+                 curl -f -s http://${{ secrets.VPS_HOST }}:8000/docs > /dev/null ||
+                 curl -f -s http://${{ secrets.VPS_HOST }}:8000/ > /dev/null; then
                 echo "✅ API is responding (attempt $i)"
                 break
               else
