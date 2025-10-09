@@ -278,6 +278,7 @@ def create_enriched_demographic_table():
         avg_density REAL,
         avg_median_age REAL,
         avg_income REAL,
+        income_category TEXT,
         percentage_age_above_20 REAL,
         percentage_age_above_25 REAL,
         percentage_age_above_30 REAL,
@@ -322,6 +323,12 @@ def create_enriched_demographic_table():
         FROM enriched_with_is_current
         WHERE is_current = true
     )
+    ,
+    income_stats AS (
+        SELECT
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY avg_income) AS median_avg_income
+        FROM current_only
+    )
     INSERT INTO schema_marketplace."saudi_real_estate_demographic_enriched" (
         listing_id,
         direction_id,
@@ -337,7 +344,8 @@ def create_enriched_demographic_table():
         percentage_age_above_45,
         percentage_age_above_50,
         demographics_analysis_date,
-        is_current
+        is_current,
+        income_category
     )
     SELECT 
         listing_id,
@@ -354,9 +362,18 @@ def create_enriched_demographic_table():
         percentage_age_above_45,
         percentage_age_above_50,
         demographics_analysis_date,
-        is_current
-    FROM current_only;
+        is_current,
+        -- Determine income_category based on median income thresholds from income_stats CTE
+        CASE
+            WHEN ci.avg_income IS NULL THEN NULL
+            WHEN ci.avg_income < (is_.median_avg_income * 0.75) THEN 'low'
+            WHEN ci.avg_income > (is_.median_avg_income * 1.25) THEN 'high'
+            ELSE 'medium'
+        END AS income_category
+    FROM current_only ci
+    CROSS JOIN income_stats as is_;
     """
+
 
 def create_enriched_household_table():
     return """
@@ -669,6 +686,7 @@ def historic_to_saudi_real_estate():
         percentage_age_above_45 REAL,
         percentage_age_above_50 REAL,
         demographics_analysis_date TEXT,
+        income_category TEXT,
         -- housing columns
         total_housings BIGINT,
         residential_housings BIGINT,
@@ -714,6 +732,7 @@ def historic_to_saudi_real_estate():
         red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
         red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
         red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date,
+        red.income_category,
         te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
         te.traffic_analysis_date,
         -- housing fields (aliased)
@@ -745,7 +764,7 @@ def historic_to_saudi_real_estate():
         direction_id, total_population, avg_density, avg_median_age, avg_income,
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
-        percentage_age_above_50, demographics_analysis_date,
+        percentage_age_above_50, demographics_analysis_date, income_category,
         -- housing columns
         total_housings, residential_housings, non_residential_housings, owned_housings,
         rented_housings, provided_housings, other_residential_housings, public_housing,
@@ -762,7 +781,7 @@ def historic_to_saudi_real_estate():
         direction_id, total_population, avg_density, avg_median_age, avg_income,
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
-        percentage_age_above_50, demographics_analysis_date,
+        percentage_age_above_50, demographics_analysis_date, income_category,
         -- housing values
         total_housings, residential_housings, non_residential_housings, owned_housings,
         rented_housings, provided_housings, other_residential_housings, public_housing,
