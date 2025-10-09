@@ -371,7 +371,8 @@ def create_enriched_household_table():
         median_household_size REAL,
         density_sum REAL,
         household_analysis_date TEXT,
-        is_current BOOLEAN
+        is_current BOOLEAN,
+        household_score REAL
     );
 
     TRUNCATE TABLE schema_marketplace."saudi_real_estate_household_enriched";
@@ -398,7 +399,15 @@ def create_enriched_household_table():
         SELECT *
         FROM ranked_listings
         WHERE is_current = TRUE
+    ),
+    household_stats AS (
+        SELECT
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_households) AS median_total_households,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY median_household_size) AS median_median_household_size,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY density_sum) AS median_density_sum
+        FROM current_records
     )
+
     INSERT INTO schema_marketplace."saudi_real_estate_household_enriched" (
         listing_id,
         total_households,
@@ -406,17 +415,28 @@ def create_enriched_household_table():
         median_household_size,
         density_sum,
         household_analysis_date,
-        is_current
+        is_current,
+        household_score
     )
     SELECT 
-        listing_id,
-        total_households,
-        avg_household_size,
-        median_household_size,
-        density_sum,
-        household_analysis_date,
-        is_current
-    FROM current_records;
+        cr.listing_id,
+        cr.total_households,
+        cr.avg_household_size,
+        cr.median_household_size,
+        cr.density_sum,
+        cr.household_analysis_date,
+        cr.is_current,
+        -- simple overall score: 1 / (1 + average relative deviation from medians)
+        -- fields considered: total_households, avg_household_size, density_sum
+        -- for each field compute abs(value - median)/NULLIF(median,0)
+        -- then average the relative deviations and convert to a score in (0,1]
+        (1.0 / (1.0 + (
+            COALESCE(ABS(cr.total_households - hs.median_total_households)::DOUBLE PRECISION / NULLIF(hs.median_total_households,0), 0) +
+            COALESCE(ABS(cr.avg_household_size - hs.median_median_household_size)::DOUBLE PRECISION / NULLIF(hs.median_median_household_size,0), 0) +
+            COALESCE(ABS(cr.density_sum - hs.median_density_sum)::DOUBLE PRECISION / NULLIF(hs.median_density_sum,0), 0)
+        ) / 3.0))::REAL as household_score
+    FROM current_records cr
+    CROSS JOIN household_stats hs;
     """
 
 
@@ -441,7 +461,8 @@ def create_enriched_housing_table():
         other_housings BIGINT,
         density_sum REAL,
         housing_analysis_date TEXT,
-        is_current BOOLEAN
+        is_current BOOLEAN,
+        housing_score REAL
     );
 
     TRUNCATE TABLE schema_marketplace."saudi_real_estate_housing_enriched";
@@ -477,6 +498,25 @@ def create_enriched_housing_table():
         FROM ranked_listings
         WHERE is_current = TRUE
     )
+    ,
+    housing_stats AS (
+        SELECT
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_housings) AS median_total_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY residential_housings) AS median_residential_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY non_residential_housings) AS median_non_residential_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY owned_housings) AS median_owned_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY rented_housings) AS median_rented_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY provided_housings) AS median_provided_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY other_residential_housings) AS median_other_residential_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY public_housing) AS median_public_housing,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY work_camps) AS median_work_camps,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY commercial_housings) AS median_commercial_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY other_housings) AS median_other_housings,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY density_sum) AS median_density_sum
+        FROM current_records
+    )
+
+    
     INSERT INTO schema_marketplace."saudi_real_estate_housing_enriched" (
         listing_id,
         total_housings,
@@ -492,27 +532,46 @@ def create_enriched_housing_table():
         other_housings,
         density_sum,
         housing_analysis_date,
-        is_current
+        is_current,
+        housing_score
     )
     SELECT 
-        listing_id,
-        total_housings,
-        residential_housings,
-        non_residential_housings,
-        owned_housings,
-        rented_housings,
-        provided_housings,
-        other_residential_housings,
-        public_housing,
-        work_camps,
-        commercial_housings,
-        other_housings,
-        density_sum,
-        housing_analysis_date,
-        is_current
-    FROM current_records;
+        cr.listing_id,
+        cr.total_housings,
+        cr.residential_housings,
+        cr.non_residential_housings,
+        cr.owned_housings,
+        cr.rented_housings,
+        cr.provided_housings,
+        cr.other_residential_housings,
+        cr.public_housing,
+        cr.work_camps,
+        cr.commercial_housings,
+        cr.other_housings,
+        cr.density_sum,
+        cr.housing_analysis_date,
+        cr.is_current,
+        -- simple housing score: 1 / (1 + average relative deviation from medians)
+        -- fields considered: total_housings, residential_housings, non_residential_housings,
+        -- owned_housings, rented_housings, provided_housings, other_residential_housings,
+        -- public_housing, work_camps, commercial_housings, other_housings, density_sum
+        (1.0 / (1.0 + (
+            COALESCE(ABS(cr.total_housings - hs.median_total_housings)::DOUBLE PRECISION / NULLIF(hs.median_total_housings,0), 0) +
+            COALESCE(ABS(cr.residential_housings - hs.median_residential_housings)::DOUBLE PRECISION / NULLIF(hs.median_residential_housings,0), 0) +
+            COALESCE(ABS(cr.non_residential_housings - hs.median_non_residential_housings)::DOUBLE PRECISION / NULLIF(hs.median_non_residential_housings,0), 0) +
+            COALESCE(ABS(cr.owned_housings - hs.median_owned_housings)::DOUBLE PRECISION / NULLIF(hs.median_owned_housings,0), 0) +
+            COALESCE(ABS(cr.rented_housings - hs.median_rented_housings)::DOUBLE PRECISION / NULLIF(hs.median_rented_housings,0), 0) +
+            COALESCE(ABS(cr.provided_housings - hs.median_provided_housings)::DOUBLE PRECISION / NULLIF(hs.median_provided_housings,0), 0) +
+            COALESCE(ABS(cr.other_residential_housings - hs.median_other_residential_housings)::DOUBLE PRECISION / NULLIF(hs.median_other_residential_housings,0), 0) +
+            COALESCE(ABS(cr.public_housing - hs.median_public_housing)::DOUBLE PRECISION / NULLIF(hs.median_public_housing,0), 0) +
+            COALESCE(ABS(cr.work_camps - hs.median_work_camps)::DOUBLE PRECISION / NULLIF(hs.median_work_camps,0), 0) +
+            COALESCE(ABS(cr.commercial_housings - hs.median_commercial_housings)::DOUBLE PRECISION / NULLIF(hs.median_commercial_housings,0), 0) +
+            COALESCE(ABS(cr.other_housings - hs.median_other_housings)::DOUBLE PRECISION / NULLIF(hs.median_other_housings,0), 0) +
+            COALESCE(ABS(cr.density_sum - hs.median_density_sum)::DOUBLE PRECISION / NULLIF(hs.median_density_sum,0), 0)
+        ) / 12.0))::REAL
+    FROM current_records cr
+    CROSS JOIN housing_stats hs;
     """
-
 
 
 def create_enriched_traffic_table():
@@ -657,10 +716,10 @@ def historic_to_saudi_real_estate():
         -- housing fields (aliased)
         he.total_housings, he.residential_housings, he.non_residential_housings, he.owned_housings,
         he.rented_housings, he.provided_housings, he.other_residential_housings, he.public_housing,
-        he.work_camps, he.commercial_housings, he.other_housings, he.density_sum AS housing_density_sum,
+        he.work_camps, he.commercial_housings, he.other_housings, he.density_sum AS housing_density_sum,he.housing_score,
         he.housing_analysis_date,
         -- household fields (aliased)
-        heh.total_households, heh.avg_household_size, heh.median_household_size, heh.density_sum AS household_density_sum,
+        heh.total_households, heh.avg_household_size, heh.median_household_size, heh.density_sum AS household_density_sum,heh.household_score,
         heh.household_analysis_date
         FROM current_listings cl
 
