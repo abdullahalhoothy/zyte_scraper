@@ -279,6 +279,9 @@ def create_enriched_demographic_table():
         avg_median_age REAL,
         avg_income REAL,
         income_category TEXT,
+        income_score_low REAL,
+        income_score_medium REAL,
+        income_score_high REAL,
         percentage_age_above_20 REAL,
         percentage_age_above_25 REAL,
         percentage_age_above_30 REAL,
@@ -336,6 +339,9 @@ def create_enriched_demographic_table():
         avg_density,
         avg_median_age,
         avg_income,
+        income_score_low,
+        income_score_medium,
+        income_score_high,
         percentage_age_above_20,
         percentage_age_above_25,
         percentage_age_above_30,
@@ -354,6 +360,10 @@ def create_enriched_demographic_table():
         avg_density,
         avg_median_age,
         avg_income,
+        -- income scores: 1/(1+relative_distance) where relative_distance = ABS(avg_income - target)/NULLIF(target,0)
+        (1.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - (is_.median_avg_income * 0.75)) / NULLIF(is_.median_avg_income * 0.75,0) END)))::REAL AS income_score_low,
+        (1.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - is_.median_avg_income) / NULLIF(is_.median_avg_income,0) END)))::REAL AS income_score_medium,
+        (1.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - (is_.median_avg_income * 1.25)) / NULLIF(is_.median_avg_income * 1.25,0) END)))::REAL AS income_score_high,
         percentage_age_above_20,
         percentage_age_above_25,
         percentage_age_above_30,
@@ -615,7 +625,7 @@ def create_enriched_traffic_table():
 
     TRUNCATE TABLE schema_marketplace."saudi_real_estate_traffic_enriched";
 
-WITH ranked_traffic AS (
+    WITH ranked_traffic AS (
     -- First CTE: assign is_current based on latest traffic_analysis_date per listing_id
     SELECT 
         te.listing_id,
@@ -687,6 +697,9 @@ def historic_to_saudi_real_estate():
         percentage_age_above_50 REAL,
         demographics_analysis_date TEXT,
         income_category TEXT,
+        income_score_low REAL,
+        income_score_medium REAL,
+        income_score_high REAL,
         -- housing columns
         total_housings BIGINT,
         residential_housings BIGINT,
@@ -732,7 +745,7 @@ def historic_to_saudi_real_estate():
         red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
         red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
         red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date,
-        red.income_category,
+        red.income_category,red.income_score_low, red.income_score_medium, red.income_score_high,
         te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
         te.traffic_analysis_date,
         -- housing fields (aliased)
@@ -765,6 +778,7 @@ def historic_to_saudi_real_estate():
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
         percentage_age_above_50, demographics_analysis_date, income_category,
+        income_score_low, income_score_medium, income_score_high,
         -- housing columns
         total_housings, residential_housings, non_residential_housings, owned_housings,
         rented_housings, provided_housings, other_residential_housings, public_housing,
@@ -782,6 +796,7 @@ def historic_to_saudi_real_estate():
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
         percentage_age_above_50, demographics_analysis_date, income_category,
+        income_score_low, income_score_medium, income_score_high,
         -- housing values
         total_housings, residential_housings, non_residential_housings, owned_housings,
         rented_housings, provided_housings, other_residential_housings, public_housing,
