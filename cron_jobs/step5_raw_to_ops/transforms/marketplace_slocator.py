@@ -683,12 +683,15 @@ def historic_to_saudi_real_estate():
         other_housings BIGINT,
         housing_density_sum REAL,
         housing_analysis_date TEXT,
+        housing_score REAL,
         -- household columns
         total_households BIGINT,
         avg_household_size REAL,
         median_household_size REAL,
         household_density_sum REAL,
         household_analysis_date TEXT,
+        household_score REAL,
+        -- traffic columns
         traffic_score REAL,
         traffic_storefront_score REAL,
         traffic_area_score REAL,
@@ -716,10 +719,12 @@ def historic_to_saudi_real_estate():
         -- housing fields (aliased)
         he.total_housings, he.residential_housings, he.non_residential_housings, he.owned_housings,
         he.rented_housings, he.provided_housings, he.other_residential_housings, he.public_housing,
-        he.work_camps, he.commercial_housings, he.other_housings, he.density_sum AS housing_density_sum,he.housing_score,
+        he.work_camps, he.commercial_housings, he.other_housings, he.density_sum AS housing_density_sum,
+        he.housing_score,
         he.housing_analysis_date,
         -- household fields (aliased)
-        heh.total_households, heh.avg_household_size, heh.median_household_size, heh.density_sum AS household_density_sum,heh.household_score,
+        heh.total_households, heh.avg_household_size, heh.median_household_size, heh.density_sum AS household_density_sum,
+        heh.household_score,
         heh.household_analysis_date
         FROM current_listings cl
 
@@ -745,8 +750,10 @@ def historic_to_saudi_real_estate():
         total_housings, residential_housings, non_residential_housings, owned_housings,
         rented_housings, provided_housings, other_residential_housings, public_housing,
         work_camps, commercial_housings, other_housings, housing_density_sum, housing_analysis_date,
+        housing_score,
         -- household columns
         total_households, avg_household_size, median_household_size, household_density_sum, household_analysis_date,
+        household_score,
         traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename,
         traffic_analysis_date
     )
@@ -760,8 +767,10 @@ def historic_to_saudi_real_estate():
         total_housings, residential_housings, non_residential_housings, owned_housings,
         rented_housings, provided_housings, other_residential_housings, public_housing,
         work_camps, commercial_housings, other_housings, housing_density_sum, housing_analysis_date,
+        housing_score,
         -- household values
         total_households, avg_household_size, median_household_size, household_density_sum, household_analysis_date,
+        household_score,
         traffic_score, traffic_storefront_score, traffic_area_score, traffic_screenshot_filename,
         traffic_analysis_date
     FROM merged_enriched;
