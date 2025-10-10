@@ -360,10 +360,10 @@ def create_enriched_demographic_table():
         avg_density,
         avg_median_age,
         avg_income,
-        -- income scores: 1/(1+relative_distance) where relative_distance = ABS(avg_income - target)/NULLIF(target,0)
-        (1.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - (is_.median_avg_income * 0.75)) / NULLIF(is_.median_avg_income * 0.75,0) END)))::REAL AS income_score_low,
-        (1.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - is_.median_avg_income) / NULLIF(is_.median_avg_income,0) END)))::REAL AS income_score_medium,
-        (1.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - (is_.median_avg_income * 1.25)) / NULLIF(is_.median_avg_income * 1.25,0) END)))::REAL AS income_score_high,
+        -- income scores: 100/(1+relative_distance) where relative_distance = ABS(avg_income - target)/NULLIF(target,0)
+        (100.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - (is_.median_avg_income * 0.75)) / NULLIF(is_.median_avg_income * 0.75,0) END)))::REAL AS income_score_low,
+        (100.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - is_.median_avg_income) / NULLIF(is_.median_avg_income,0) END)))::REAL AS income_score_medium,
+        (100.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - (is_.median_avg_income * 1.25)) / NULLIF(is_.median_avg_income * 1.25,0) END)))::REAL AS income_score_high,
         percentage_age_above_20,
         percentage_age_above_25,
         percentage_age_above_30,
@@ -453,11 +453,11 @@ def create_enriched_household_table():
         cr.density_sum,
         cr.household_analysis_date,
         cr.is_current,
-        -- simple overall score: 1 / (1 + average relative deviation from medians)
+        -- simple overall score: 100 / (1 + average relative deviation from medians)
         -- fields considered: total_households, avg_household_size, density_sum
         -- for each field compute abs(value - median)/NULLIF(median,0)
-        -- then average the relative deviations and convert to a score in (0,1]
-        (1.0 / (1.0 + (
+        -- then average the relative deviations and convert to a score in (0,100]
+        (100.0 / (1.0 + (
             COALESCE(ABS(cr.total_households - hs.median_total_households)::DOUBLE PRECISION / NULLIF(hs.median_total_households,0), 0) +
             COALESCE(ABS(cr.avg_household_size - hs.median_median_household_size)::DOUBLE PRECISION / NULLIF(hs.median_median_household_size,0), 0) +
             COALESCE(ABS(cr.density_sum - hs.median_density_sum)::DOUBLE PRECISION / NULLIF(hs.median_density_sum,0), 0)
@@ -578,11 +578,11 @@ def create_enriched_housing_table():
         cr.density_sum,
         cr.housing_analysis_date,
         cr.is_current,
-        -- simple housing score: 1 / (1 + average relative deviation from medians)
+        -- simple housing score: 100 / (1 + average relative deviation from medians)
         -- fields considered: total_housings, residential_housings, non_residential_housings,
         -- owned_housings, rented_housings, provided_housings, other_residential_housings,
         -- public_housing, work_camps, commercial_housings, other_housings, density_sum
-        (1.0 / (1.0 + (
+        (100.0 / (1.0 + (
             COALESCE(ABS(cr.total_housings - hs.median_total_housings)::DOUBLE PRECISION / NULLIF(hs.median_total_housings,0), 0) +
             COALESCE(ABS(cr.residential_housings - hs.median_residential_housings)::DOUBLE PRECISION / NULLIF(hs.median_residential_housings,0), 0) +
             COALESCE(ABS(cr.non_residential_housings - hs.median_non_residential_housings)::DOUBLE PRECISION / NULLIF(hs.median_non_residential_housings,0), 0) +
