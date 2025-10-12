@@ -4,6 +4,13 @@
 import sys
 import os
 import json
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
+
 
 # Get the directory of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,6 +20,10 @@ grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 
 # Add the grandparent directory to the system path
 sys.path.append(grandparent_dir)
+
+if(args.log_file):
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
 
 
 from cron_jobs.step3_add_to_gbucket.upload_to_gbucket import (
@@ -24,7 +35,7 @@ from cron_jobs.step3_add_to_gbucket.upload_to_gbucket import (
 directories = [{"zad_income_data": ["interpolated_income"]}]
 
 upload_success = upload_dev_gcp(directories)
-print(upload_success)
+logging.info(upload_success)
 
-# upload_success = upload_prod_gcp(directories)
-# print(upload_success)
+upload_success = upload_prod_gcp(directories)
+logging.info(upload_success)

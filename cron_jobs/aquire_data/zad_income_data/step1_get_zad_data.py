@@ -3,7 +3,20 @@ import csv
 import json
 import requests
 from datetime import datetime
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
 
+
+if(args.log_file):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+    sys.path.append(grandparent_dir)
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
 
 def swap_coordinates(nested_coords):
     def recursive_swap(coords):
@@ -133,7 +146,7 @@ saudiFemale_income = response.json()["data"]["saudiFemale"]["facts"]
 nonSaudiMale_income = response.json()["data"]["nonSaudiMale"]["facts"]
 nonSaudiFemale_income = response.json()["data"]["nonSaudiFemale"]["facts"]
 
-print("Total Areas: {}".format(len(areas)))
+logging.info("Total Areas: {}".format(len(areas)))
 
 # Convert income data to dictionaries for easier lookup by area name
 income_data = {
@@ -153,7 +166,7 @@ for idx, data in enumerate(areas):
     area_id = data["area"]["id"]
     area_name = data["area"]["name"]
     
-    print(f"Processing Area: {area_name}")
+    logging.info(f"Processing Area: {area_name}")
 
     # Initialize area data dictionary
     area_properties = {
@@ -192,73 +205,76 @@ for idx, data in enumerate(areas):
 
     response_data = requests.post(url, headers=headers, data=payload_data)
     json_data = response_data.json()["data"]
-    
-    # Get coordinates and swap them
-    if len(json_data["area"].get("simplifiedShape", []))>2:
-        # manually verify which shapes are being sent
-        pause=1
-    raw_coordinates = json_data["area"].get("simplifiedShape", [])[0]
-    swapped_coordinates = swap_coordinates(raw_coordinates) if raw_coordinates else []
-    
-    area_properties["name"] = json_data["area"].get("name", "")
-    area_properties["type"] = json_data["area"].get("type", "")
+    # This checks if geometry exists or not
+    if(json_data["area"]["simplifiedShape"]):
+      # Get coordinates and swap them
+      if len(json_data["area"].get("simplifiedShape", []))>2:
+          # manually verify which shapes are being sent
+          pause=1
+      raw_coordinates = json_data["area"].get("simplifiedShape", [])[0]
+      swapped_coordinates = swap_coordinates(raw_coordinates) if raw_coordinates else []
+      
+      area_properties["name"] = json_data["area"].get("name", "")
+      area_properties["type"] = json_data["area"].get("type", "")
 
-    # Get demographic data
-    payload_demo = json.dumps(
-        {
-            "operationName": "getDemographicData",
-            "variables": {"areas": [area_id]},
-            "query": """
-        query getDemographicData($areas: [String]!) {
-            totalPopulation: population(filters: {areas: $areas}, splits: []) {
-                facts { value }
-            }
-            malePopulation: population(filters: {areas: $areas, sexes: ["male"]}, splits: []) {
-                facts { value }
-            }
-            femalePopulation: population(filters: {areas: $areas, sexes: ["female"]}, splits: []) {
-                facts { value }
-            }
-            saudiPopulation: population(filters: {areas: $areas, nationalities: ["saudi"]}, splits: []) {
-                facts { value }
-            }
-            nonSaudiPopulation: population(filters: {areas: $areas, nationalities: ["nonSaudi"]}, splits: []) {
-                facts { value }
-            }
-
-            byGenderAndAgeGroupPopulation: population(filters: {areas: $areas}, splits: ["sex", "ageGroup"]) {
-                facts {
-                  splits {
-                    id
-                  }
-                  value
-                }
-            }
-            byNationalityAndAgeGroupPopulation: population(filters: {areas: $areas}, splits: ["nationality", "ageGroup"]) {
-                facts {
-                  splits {
-                    id
-                  }
-                  value
-                }
-            }
-            male: averageIncome(filters: {male: true, saudi: null, parentAreas: $areas}, orders: {id: "value", direction: "desc"}) {
-            facts {
-              area {
-                id
-                name(language: "ar")
+      # Get demographic data
+      payload_demo = json.dumps(
+          {
+              "operationName": "getDemographicData",
+              "variables": {"areas": [area_id]},
+              "query": """
+          query getDemographicData($areas: [String]!) {
+              totalPopulation: population(filters: {areas: $areas}, splits: []) {
+                  facts { value }
               }
-              value
+              malePopulation: population(filters: {areas: $areas, sexes: ["male"]}, splits: []) {
+                  facts { value }
+              }
+              femalePopulation: population(filters: {areas: $areas, sexes: ["female"]}, splits: []) {
+                  facts { value }
+              }
+              saudiPopulation: population(filters: {areas: $areas, nationalities: ["saudi"]}, splits: []) {
+                  facts { value }
+              }
+              nonSaudiPopulation: population(filters: {areas: $areas, nationalities: ["nonSaudi"]}, splits: []) {
+                  facts { value }
+              }
+
+              byGenderAndAgeGroupPopulation: population(filters: {areas: $areas}, splits: ["sex", "ageGroup"]) {
+                  facts {
+                    splits {
+                      id
+                    }
+                    value
+                  }
+              }
+              byNationalityAndAgeGroupPopulation: population(filters: {areas: $areas}, splits: ["nationality", "ageGroup"]) {
+                  facts {
+                    splits {
+                      id
+                    }
+                    value
+                  }
+              }
+              male: averageIncome(filters: {male: true, saudi: null, parentAreas: $areas}, orders: {id: "value", direction: "desc"}) {
+              facts {
+                area {
+                  id
+                  name(language: "ar")
+                }
+                value
+              }
             }
+
           }
+          """,
+          }
+      )
 
-        }
-        """,
-        }
-    )
-
-    demo_response = requests.post(url, headers=headers, data=payload_demo)
-    demo_data = demo_response.json().get("data", {})
+      demo_response = requests.post(url, headers=headers, data=payload_demo)
+      demo_data = demo_response.json().get("data", {})
+    else:
+        logging.warning(f'Skipping feature: No geometry found for {json_data["area"]["name"]}')
 
     def extract_value(key):
         try:
@@ -316,12 +332,17 @@ if geojson_features:
     os.makedirs("zad_output_geo_json_files", exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     census_path = r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_income_data"
+    # filename_json = os.path.join(
+    #     census_path,
+    #     "zad_output_geo_json_files",
+    #     f"Output_data_{timestamp}.geojson",
+    # )
     filename_json = os.path.join(
         census_path,
         "zad_output_geo_json_files",
-        f"Output_data_{timestamp}.geojson",
+        f"Output_data.geojson",
     )
 
     with open(filename_json, "w", encoding="utf-8") as f:
         json.dump(final_geojson, f, ensure_ascii=False, indent=4)
-    print(f"\n📁 Saved collected Data to Geo-json file: {filename_json}")
+    logging.info(f"\n📁 Saved collected Data to Geo-json file: {filename_json}")

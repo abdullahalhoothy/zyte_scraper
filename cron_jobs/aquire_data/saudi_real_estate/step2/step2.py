@@ -1,15 +1,29 @@
 from datetime import datetime
 import os
+import sys
 from time import sleep
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from step2_traffic_analysis import GoogleMapsTrafficAnalyzer, logger
+from step2_traffic_analysis import GoogleMapsTrafficAnalyzer
 from step2_add_demographics import fetch_demographics
 from step2_add_demographics import login_and_get_user
 from step2_add_demographics import fetch_household_from_db
 from step2_add_demographics import fetch_housing_from_db
 from step2_extract_listing_id import add_listing_ids_to_csv
 from step2_scrapy_transform_to_csv import process_real_estate_data
+import logging
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
+
+
+if(args.log_file):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..",".."))
+    sys.path.append(grandparent_dir)
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
 
 # --- Centralized column definitions ---
 INPUT_COLUMNS = [
@@ -96,7 +110,7 @@ def ensure_city_csv(
         if (now - last_modified).days < 1:
             need_create = False
     if need_create:
-        print(f"Creating {city} CSV: {city_csv_path}")
+        logging.info(f"Creating {city} CSV: {city_csv_path}")
         first_chunk = True
         for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
             city_chunk = chunk[chunk["city"] == city].copy()
@@ -110,9 +124,9 @@ def ensure_city_csv(
                 city_chunk.to_csv(
                     city_csv_path, index=False, mode="a", header=False
                 )
-        logger.info(f"{city} records saved to: {city_csv_path}")
+        logging.info(f"{city} records saved to: {city_csv_path}")
     else:
-        print(f"{city} CSV is up-to-date: {city_csv_path}")
+        logging.info(f"{city} CSV is up-to-date: {city_csv_path}")
     return city_csv_path
 
 
@@ -202,7 +216,7 @@ def update_csv_with_results(
         os.replace(temp_updated_path, temp_path)
     except Exception as e:
         # warning log
-        logger.warning(
+        logging.warning(
             f"Failed to replace {temp_path} with updated file {temp_updated_path}: {e}"
         )
 
@@ -215,21 +229,21 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     output_path = f"{base_path}_{city}_enriched_with_traffic.csv"
     temp_path = f"{base_path}_{city}_traffic_temp_processing.csv"
 
-    logger.info(f"Starting traffic analysis for {city} locations")
-    logger.info(f"Input CSV: {city_csv_path}")
-    logger.info(f"Enriched Output CSV: {output_path}")
+    logging.info(f"Starting traffic analysis for {city} locations")
+    logging.info(f"Input CSV: {city_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
 
     ensure_columns_in_csv(city_csv_path, TRAFFIC_COLUMNS, temp_path)
     locations = get_locations_needing_processing(
         temp_path, "traffic_score", city
     )
-    logger.info(
+    logging.info(
         f"Found {len(locations)} {city} locations needing traffic analysis"
     )
     if len(locations) == 0:
-        logger.info(f"All {city} locations already have traffic data")
+        logging.info(f"All {city} locations already have traffic data")
         os.rename(temp_path, output_path)
-        logger.info(f"All data saved to: {output_path}")
+        logging.info(f"All data saved to: {output_path}")
         return output_path
 
     processed_count = 0
@@ -238,7 +252,7 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
 
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
-        logger.info(
+        logging.info(
             f"Processing traffic for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
         )
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
@@ -262,7 +276,7 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
                 try:
                     traffic_result = future.result()
                 except Exception as e:
-                    logger.error(
+                    logging.error(
                         f"Traffic analysis failed for {lat}, {lng}: {e}"
                     )
                     traffic_result = {"score": 0, "error": str(e)}
@@ -285,20 +299,20 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
                     ),
                 }
                 processed_count += 1
-        logger.info(
+        logging.info(
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, traffic_results, TRAFFIC_COLUMNS)
-        logger.info(
+        logging.info(
             f"Batch progress saved: {processed_count} records updated in CSV"
         )
         traffic_results = {}  # Clear for next batch
-    logger.info("Finalizing enriched output file...")
+    logging.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logger.info(
+    logging.info(
         f"Traffic analysis completed: {processed_count} locations processed"
     )
-    logger.info(f"Enriched CSV with all data saved to: {output_path}")
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
 
@@ -311,21 +325,21 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
     output_path = f"{base_path}_{city}_enriched_with_demographics.csv"
     temp_path = f"{base_path}_{city}_temp_demographics.csv"
 
-    logger.info(f"Starting demographic analysis for {city} locations")
-    logger.info(f"Input CSV: {city_csv_path}")
-    logger.info(f"Enriched Output CSV: {output_path}")
+    logging.info(f"Starting demographic analysis for {city} locations")
+    logging.info(f"Input CSV: {city_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
 
     ensure_columns_in_csv(city_csv_path, DEMOGRAPHIC_COLUMNS, temp_path)
     locations = get_locations_needing_processing(
         temp_path, "total_population", city
     )
-    logger.info(
+    logging.info(
         f"Found {len(locations)} {city} locations needing demographic analysis"
     )
     if len(locations) == 0:
-        logger.info(f"All {city} locations already have demographic data")
+        logging.info(f"All {city} locations already have demographic data")
         os.rename(temp_path, output_path)
-        logger.info(f"All data saved to: {output_path}")
+        logging.info(f"All data saved to: {output_path}")
         return output_path
 
     processed_count = 0
@@ -334,7 +348,7 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
 
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
-        logger.info(
+        logging.info(
             f"Processing demographics for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
         )
         user_id, id_token = login_and_get_user()
@@ -360,20 +374,20 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
                     ),
                 }
                 processed_count += 1
-        logger.info(
+        logging.info(
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, demo_results, DEMOGRAPHIC_COLUMNS)
-        logger.info(
+        logging.info(
             f"Batch progress saved: {processed_count} records updated in CSV"
         )
         demo_results = {}  # Clear for next batch
-    logger.info("Finalizing enriched output file...")
+    logging.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logger.info(
+    logging.info(
         f"Demographic analysis completed: {processed_count} locations processed"
     )
-    logger.info(f"Enriched CSV with all data saved to: {output_path}")
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
 
@@ -387,21 +401,21 @@ def process_city_household(csv_path: str, batch_size: int, city=CITY_FILTER):
     output_path = f"{base_path}_{city}_enriched_with_household.csv"
     temp_path = f"{base_path}_{city}_temp_household.csv"
 
-    logger.info(f"Starting household analysis for {city} locations")
-    logger.info(f"Input CSV: {city_csv_path}")
-    logger.info(f"Enriched Output CSV: {output_path}")
+    logging.info(f"Starting household analysis for {city} locations")
+    logging.info(f"Input CSV: {city_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
 
     ensure_columns_in_csv(city_csv_path, HOUSEHOLD_COLUMNS, temp_path)
     locations = get_locations_needing_processing(
         temp_path, "total_households", city
     )
-    logger.info(
+    logging.info(
         f"Found {len(locations)} {city} locations needing household analysis"
     )
     if len(locations) == 0:
-        logger.info(f"All {city} locations already have household data")
+        logging.info(f"All {city} locations already have household data")
         os.rename(temp_path, output_path)
-        logger.info(f"All data saved to: {output_path}")
+        logging.info(f"All data saved to: {output_path}")
         return output_path
 
     processed_count = 0
@@ -410,7 +424,7 @@ def process_city_household(csv_path: str, batch_size: int, city=CITY_FILTER):
 
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
-        logger.info(
+        logging.info(
             f"Processing household for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
         )
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
@@ -429,7 +443,7 @@ def process_city_household(csv_path: str, batch_size: int, city=CITY_FILTER):
                 try:
                     hh_result = future.result()
                 except Exception as e:
-                    logger.error(f"Household DB query failed for {lat}, {lng}: {e}")
+                    logging.error(f"Household DB query failed for {lat}, {lng}: {e}")
                     hh_result = {
                         "total_households": 0,
                         "avg_household_size": 0.0,
@@ -446,20 +460,20 @@ def process_city_household(csv_path: str, batch_size: int, city=CITY_FILTER):
                     ),
                 }
                 processed_count += 1
-        logger.info(
+        logging.info(
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, hh_results, HOUSEHOLD_COLUMNS)
-        logger.info(
+        logging.info(
             f"Batch progress saved: {processed_count} records updated in CSV"
         )
         hh_results = {}  # Clear for next batch
-    logger.info("Finalizing enriched output file...")
+    logging.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logger.info(
+    logging.info(
         f"Household analysis completed: {processed_count} locations processed"
     )
-    logger.info(f"Enriched CSV with all data saved to: {output_path}")
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
 
@@ -473,21 +487,21 @@ def process_city_housing(csv_path: str, batch_size: int, city=CITY_FILTER):
     output_path = f"{base_path}_{city}_enriched_with_housing.csv"
     temp_path = f"{base_path}_{city}_temp_housing.csv"
 
-    logger.info(f"Starting housing analysis for {city} locations")
-    logger.info(f"Input CSV: {city_csv_path}")
-    logger.info(f"Enriched Output CSV: {output_path}")
+    logging.info(f"Starting housing analysis for {city} locations")
+    logging.info(f"Input CSV: {city_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
 
     ensure_columns_in_csv(city_csv_path, HOUSING_COLUMNS, temp_path)
     locations = get_locations_needing_processing(
         temp_path, "total_housings", city
     )
-    logger.info(
+    logging.info(
         f"Found {len(locations)} {city} locations needing housing analysis"
     )
     if len(locations) == 0:
-        logger.info(f"All {city} locations already have housing data")
+        logging.info(f"All {city} locations already have housing data")
         os.rename(temp_path, output_path)
-        logger.info(f"All data saved to: {output_path}")
+        logging.info(f"All data saved to: {output_path}")
         return output_path
 
     processed_count = 0
@@ -496,7 +510,7 @@ def process_city_housing(csv_path: str, batch_size: int, city=CITY_FILTER):
 
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
-        logger.info(
+        logging.info(
             f"Processing housing for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
         )
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
@@ -515,7 +529,7 @@ def process_city_housing(csv_path: str, batch_size: int, city=CITY_FILTER):
                 try:
                     housing_result = future.result()
                 except Exception as e:
-                    logger.error(f"Housing DB query failed for {lat}, {lng}: {e}")
+                    logging.error(f"Housing DB query failed for {lat}, {lng}: {e}")
                     housing_result = {
                         "total_housings": 0,
                         "residential_housings": 0,
@@ -539,20 +553,20 @@ def process_city_housing(csv_path: str, batch_size: int, city=CITY_FILTER):
                     ),
                 }
                 processed_count += 1
-        logger.info(
+        logging.info(
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, housing_results, HOUSING_COLUMNS)
-        logger.info(
+        logging.info(
             f"Batch progress saved: {processed_count} records updated in CSV"
         )
         housing_results = {}  # Clear for next batch
-    logger.info("Finalizing enriched output file...")
+    logging.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logger.info(
+    logging.info(
         f"Housing analysis completed: {processed_count} locations processed"
     )
-    logger.info(f"Enriched CSV with all data saved to: {output_path}")
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
 

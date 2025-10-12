@@ -4,13 +4,26 @@ import csv
 import os
 import numpy as np
 from datetime import datetime
-import logging
 import urllib3
 from time import sleep
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
+
+
+if(args.log_file):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..",".."))
+    sys.path.append(grandparent_dir)
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 log_file_path = os.path.join(MODULE_DIR, "household.log")
-logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='w', format='%(asctime)s - %(levelname)s - %(message)s')
+# logging.basicConfig(level=logging.info, filename=log_file_path, filemode='w', format='%(asctime)s - %(levelname)s - %(message)s')
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 COLUMN_MAPPING = {
@@ -155,7 +168,6 @@ def main():
         logging.info(f"Processing level {level}...")
         features = process_census_data(level)
         all_features.extend(features)
-
     # Convert to numpy array for faster processing
     if all_features:
         # Save all data to CSV
@@ -165,6 +177,7 @@ def main():
         ]
         # save to json
         json_files_path = os.path.join(MODULE_DIR, "all_features.json")
+        logging.info('json_files_path')
         with open(json_files_path, 'w') as f:
             json.dump(all_features, f, indent=2)
         # # Save combined CSV with mapped column names

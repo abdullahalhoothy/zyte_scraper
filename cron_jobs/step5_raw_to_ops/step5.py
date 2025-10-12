@@ -4,6 +4,20 @@ import json
 from db_connection import DatabaseConnection
 import importlib.util
 import inspect
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
+
+
+if(args.log_file):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
+    sys.path.append(grandparent_dir)
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
 
 def get_module_functions(module_name: str, base_path: str = "cron_jobs/step5_raw_to_ops/transforms"):
     full_path = os.path.join(base_path, f"{module_name}.py")
@@ -27,15 +41,15 @@ def apply_transformation(db_conn, transform_name):
         # transform_functions = AVAILABLE_TRANSFORMS[transform_name]
         functions = get_module_functions(transform_name)
         for func in functions:
-            print(f"beginning function: {func.__name__} ")
+            logging.info(f"beginning function: {func.__name__} ")
             query = func()
             db_conn.execute_query(query)
-            print(f"Successfully applied function: {func.__name__}")
+            logging.info(f"Successfully applied function: {func.__name__}")
 
-        print(f"Successfully applied transformation: {transform_name}")
+        logging.info(f"Successfully applied transformation: {transform_name}")
 
     except Exception as e:
-        print(f"Error applying transformation {transform_name}: {e}")
+        logging.info(f"Error applying transformation {transform_name}: {e}")
         raise
 
 
@@ -66,7 +80,7 @@ def main():
 
                 conn = connections[server + db_name]
 
-                print(f"\nApplying transformation: {transform}")
+                logging.info(f"\nApplying transformation: {transform}")
                 apply_transformation(conn, transform_name)
 
 

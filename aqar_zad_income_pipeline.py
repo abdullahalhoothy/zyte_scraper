@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Saudi Real Estate Data Pipeline
+Zad Income Data Data Pipeline
 
-This script orchestrates the execution of the Saudi real estate data processing pipeline,
+This script orchestrates the execution of the Zad Income Data data processing pipeline,
 running each step in sequence and ensuring proper logging and error handling.
 """
 
@@ -14,7 +14,7 @@ from datetime import datetime
 from logging_utils import setup_logging
 
 def run_step(step_name, script_path, log_file):
-    """Run a Saudi real estate pipeline step and verify its successful completion."""
+    """Run a Zad Income Data pipeline step and verify its successful completion."""
     logging.info(f"Starting: {step_name}")
     logging.info(f"Script: {script_path}")
     logging.info("-" * 50)
@@ -43,16 +43,16 @@ def run_step(step_name, script_path, log_file):
         if e.stderr:
             logging.error(f"Error: {e.stderr}")
         return False
-    
+
 def main():
-    """Main Saudi real estate pipeline orchestration function."""
+    """Main Zad Income Data pipeline orchestration function."""
     log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(
-        log_dir, f"saudi_real_estate_pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        log_dir, f"zad_income_data_pipeline{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     )
     setup_logging(log_file)
-    logging.info(f"Starting Saudi Real Estate pipeline at {datetime.now()}")
+    logging.info(f"Starting Zad Income Data pipeline at {datetime.now()}")
     logging.info(f"Using Python interpreter: {sys.executable}")
     
     # Verify we're running in the virtual environment
@@ -64,29 +64,29 @@ def main():
     # Get the base directory
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Define Saudi real estate pipeline steps in sequence
+    # Define Zad Income Data pipeline steps in sequence
     steps = [
         {
-            "name": "Step 1: Acquiring Saudi real estate data",
-            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "saudi_real_estate", "step1_scrapy_aquire_data.py")
+            "name": "Step 1: Acquiring Zad Income Data data",
+            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "zad_income_data", "step1_get_zad_data.py")
         },
         {
-            "name": "Step 2: Transforming Saudi real estate data to CSV",
-            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "saudi_real_estate", "step2", "step2.py")
+            "name": "Step 2: Transforming Zad Income Data data to CSV",
+            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "zad_income_data", "step2_income_interpolate_zad.py")
         },
         {
-            "name": "Step 3: Uploading Saudi real estate data to GCP",
-            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "saudi_real_estate", "step3_upload_gcp.py")
-        },
+            "name": "Step 3: Uploading Zad Income Data data to GCP",
+            "script": os.path.join(base_dir, "cron_jobs", "aquire_data", "zad_income_data", "step3_upload_gcp.py")
+        }
     ]
     
     # Run each step in sequence
     for step in steps:
         if not run_step(step["name"], step["script"], log_file):
-            logging.error("Saudi real estate pipeline failed, exiting.")
+            logging.error("Zad Income Data pipeline failed, exiting.")
             sys.exit(1)
     
-    logging.info(f"Saudi real estate pipeline completed successfully at {datetime.now()}")
+    logging.info(f"Zad Income Data pipeline completed successfully at {datetime.now()}")
     logging.info(f"Full log available at: {log_file}")
     
 if __name__ == "__main__":

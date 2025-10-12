@@ -8,10 +8,21 @@ import json
 import sys
 from io import StringIO
 from geojsongcp2postgis import run_geojson_gcp_to_db
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
+
 
 module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(module_dir)
 from common_methods import GCPBucketManager
+
+if(args.log_file):
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
 
 
 def all_chunks(gcp, file_paths, chunk_size):
@@ -19,7 +30,7 @@ def all_chunks(gcp, file_paths, chunk_size):
     Generator yielding DataFrame chunks from all CSV files in file_paths.
     """
     for file_path in file_paths:
-        print(f"Reading chunks from CSV: {file_path}")
+        logging.info(f"Reading chunks from CSV: {file_path}")
         blob = gcp.bucket.blob(file_path)
         data = blob.download_as_bytes()
         try:
@@ -47,7 +58,7 @@ def insert_all_chunks_to_temp_table(
     Create a temp table and insert all chunks into it (appending).
     df_for_types: DataFrame to infer column types (first chunk or sample)
     """
-    print(f"Creating temporary table {schema}.{temp_table_name} for bulk insert...")
+    logging.info(f"Creating temporary table {schema}.{temp_table_name} for bulk insert...")
     columns = []
     for col in df_for_types.columns:
         dtype = (
@@ -64,7 +75,7 @@ def insert_all_chunks_to_temp_table(
     with conn.cursor() as cursor:
         cursor.execute(create_temp)
         for i, chunk_df in enumerate(chunk_iter):
-            print(f"Bulk inserting chunk {i+1} into {schema}.{temp_table_name}...")
+            logging.info(f"Bulk inserting chunk {i+1} into {schema}.{temp_table_name}...")
             csv_text = chunk_df.to_csv(
                 index=False, header=False, sep="\t", na_rep="\\N"
             )
@@ -78,7 +89,7 @@ def insert_all_chunks_to_temp_table(
             ).format(sql.Identifier(schema), sql.Identifier(temp_table_name), columns_sql)
             cursor.execute("SET client_encoding TO 'UTF8'")
             cursor.copy_expert(copy_cmd, buffer)
-    print(f"All chunks inserted into temporary table {schema}.{temp_table_name}.")
+    logging.info(f"All chunks inserted into temporary table {schema}.{temp_table_name}.")
 
 
 def replace_table_with_temp(conn, schema, table_name, temp_table_name):
@@ -86,7 +97,7 @@ def replace_table_with_temp(conn, schema, table_name, temp_table_name):
     Atomically swap temp table with original table, using same logic as insert_data_into_table.
     df_for_types: DataFrame to infer column types (first chunk or sample)
     """
-    print(
+    logging.info(
         f"Swapping tables: replacing {schema}.{table_name} with {schema}.{temp_table_name}..."
     )
     old_table = f"old_{table_name}"
@@ -119,7 +130,7 @@ def replace_table_with_temp(conn, schema, table_name, temp_table_name):
                 sql.Identifier(schema), sql.Identifier(old_table)
             )
         )
-    print(
+    logging.info(
         f"Table {schema}.{table_name} replaced with data from {schema}.{temp_table_name}."
     )
 
@@ -133,7 +144,7 @@ def ensure_database_exists(config, db_name):
         return get_db_connection(config, db_name)
     except psycopg2.Error as e:
         if "database" in str(e) and "does not exist" in str(e):
-            print(f"Database {db_name} does not exist. Creating...")
+            logging.info(f"Database {db_name} does not exist. Creating...")
             # Connect to postgres to create the database
             postgres_conn = get_db_connection(config, "postgres")
             postgres_conn.autocommit = True
@@ -143,12 +154,12 @@ def ensure_database_exists(config, db_name):
                     cursor.execute(
                         sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name))
                     )
-                print(f"Successfully created database {db_name}")
+                logging.info(f"Successfully created database {db_name}")
             finally:
                 postgres_conn.close()
 
             # Now connect to the newly created database
-            print(f"Connecting to newly created database {db_name}")
+            logging.info(f"Connecting to newly created database {db_name}")
             return get_db_connection(config, db_name)
         raise
 
@@ -158,7 +169,7 @@ def get_db_connection(db_config, db_name=None):
     conn_params = db_config.copy()
     if db_name:
         conn_params["dbname"] = db_name
-    print(f"Attempting connection to database: {conn_params['dbname']}")
+    logging.info(f"Attempting connection to database: {conn_params['dbname']}")
     # Add connection timeout (default 15 seconds)
     conn_params.setdefault("connect_timeout", 15)
     return psycopg2.connect(**conn_params)
@@ -208,7 +219,7 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
                 conn, schema_name, table_name, temp_table_name
             )
             conn.commit()
-            print(f"All CSVs inserted into {db_name}.{schema_name}.{table_name}")
+            logging.info(f"All CSVs inserted into {db_name}.{schema_name}.{table_name}")
 
         # Process image files
         for (db_name, schema_name, table_name), image_data in objects_to_create[
@@ -220,10 +231,10 @@ def process_database_structure(gcp, config, bucket_name, objects_to_create):
             conn = connections[db_name]
             insert_image_metadata(conn, schema_name, table_name, image_data)
             conn.commit()
-            print(f"Image metadata inserted into {db_name}.{schema_name}.{table_name}")
+            logging.info(f"Image metadata inserted into {db_name}.{schema_name}.{table_name}")
 
     except Exception as e:
-        print(f"Error occurred: {e}")
+        logging.info(f"Error occurred: {e}")
         for conn in connections.values():
             try:
                 conn.rollback()
@@ -257,7 +268,7 @@ def create_schema_and_table(conn, df, schema, table_name):
                 cursor.execute(
                     sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema))
                 )
-                print(f"Schema '{schema}' created successfully.")
+                logging.info(f"Schema '{schema}' created successfully.")
 
             # Create table
             columns = []
@@ -270,7 +281,7 @@ def create_schema_and_table(conn, df, schema, table_name):
                 columns.append(
                     sql.SQL("{} {}").format(sql.Identifier(col), sql.SQL(dtype))
                 )
-            print(f"Creating table '{schema}.{table_name}'...")
+            logging.info(f"Creating table '{schema}.{table_name}'...")
 
             # Build the CREATE TABLE command using SQL composition
             create_table_cmd = sql.SQL("CREATE TABLE {}.{} ({})").format(
@@ -292,9 +303,9 @@ def create_schema_and_table(conn, df, schema, table_name):
 
             if not cursor.fetchone():
                 cursor.execute(create_table_cmd)
-                print(f"Table '{schema}.{table_name}' created successfully.")
+                logging.info(f"Table '{schema}.{table_name}' created successfully.")
             else:
-                print(f"Table '{schema}.{table_name}' already exists.")
+                logging.info(f"Table '{schema}.{table_name}' already exists.")
 
     finally:
         conn.autocommit = False  # Restore autocommit to False
@@ -302,7 +313,7 @@ def create_schema_and_table(conn, df, schema, table_name):
 
 def insert_data_into_table(conn, df, table_name, schema):
     # add prints to this function for debugging
-    print(f"Inserting data into {schema}.{table_name}...")
+    logging.info(f"Inserting data into {schema}.{table_name}...")
     # First, analyze DataFrame to determine which columns need BIGINT
     columns_to_alter = []
     for col in df.columns:
@@ -318,14 +329,14 @@ def insert_data_into_table(conn, df, table_name, schema):
                     df[col] = df[col].fillna(0).astype("int64")
 
     # Write CSV to bytes buffer with UTF-8 encoding
-    print(f"Preparing data for COPY into {schema}.{table_name}...")
+    logging.info(f"Preparing data for COPY into {schema}.{table_name}...")
     csv_text = df.to_csv(index=False, header=False, sep="\t", na_rep="\\N")
     buffer = BytesIO(csv_text.encode("utf-8"))
     buffer.seek(0)
 
     with conn.cursor() as cursor:
         try:
-            print(f"Starting COPY to {schema}.{table_name}...")
+            logging.info(f"Starting COPY to {schema}.{table_name}...")
             # Create a temporary table
             temp_table = f"temp_{table_name}"
             # Drop temp table if it exists
@@ -345,7 +356,7 @@ def insert_data_into_table(conn, df, table_name, schema):
                 columns.append(
                     sql.SQL("{} {}").format(sql.Identifier(col), sql.SQL(dtype))
                 )
-            print(f"Creating temporary table {schema}.{temp_table}...")
+            logging.info(f"Creating temporary table {schema}.{temp_table}...")
             create_temp = sql.SQL("CREATE TABLE {}.{} ({})").format(
                 sql.Identifier(schema),
                 sql.Identifier(temp_table),
@@ -355,7 +366,7 @@ def insert_data_into_table(conn, df, table_name, schema):
 
             # Alter column types to BIGINT where needed
             for column in columns_to_alter:
-                print(f"Altering column {column} to BIGINT in temp table...")
+                logging.info(f"Altering column {column} to BIGINT in temp table...")
                 alter_column = sql.SQL(
                     """
                     ALTER TABLE {}.{} 
@@ -369,7 +380,7 @@ def insert_data_into_table(conn, df, table_name, schema):
                 cursor.execute(alter_column)
 
             # Insert into temp table
-            print(f"Inserting data into temporary table {schema}.{temp_table}...")
+            logging.info(f"Inserting data into temporary table {schema}.{temp_table}...")
             qualified_temp_table = sql.SQL("{}.{}").format(
                 sql.Identifier(schema), sql.Identifier(temp_table)
             )
@@ -381,7 +392,7 @@ def insert_data_into_table(conn, df, table_name, schema):
             cursor.copy_expert(copy_cmd, buffer)
 
             # Swap tables
-            print(f"Swapping tables to replace {schema}.{table_name}...")
+            logging.info(f"Swapping tables to replace {schema}.{table_name}...")
             old_table = f"old_{table_name}"
             rename_commands = [
                 sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
@@ -403,25 +414,25 @@ def insert_data_into_table(conn, df, table_name, schema):
             ]
             for cmd in rename_commands:
                 cursor.execute(cmd)
-            print(f"Table {schema}.{table_name} replaced with {len(df)} new rows")
+            logging.info(f"Table {schema}.{table_name} replaced with {len(df)} new rows")
             if columns_to_alter:
-                print(f"Columns converted to BIGINT: {', '.join(columns_to_alter)}")
+                logging.info(f"Columns converted to BIGINT: {', '.join(columns_to_alter)}")
         except Exception as e:
-            print(f"Error during copy to {schema}.{table_name}: {e}")
-            print("First row of DataFrame:")
-            print(df.iloc[0].to_dict() if not df.empty else "<DataFrame is empty>")
-            print("DataFrame dtypes:")
-            print(df.dtypes)
-            print("First 200 bytes of buffer:")
+            logging.info(f"Error during copy to {schema}.{table_name}: {e}")
+            logging.info("First row of DataFrame:")
+            logging.info(df.iloc[0].to_dict() if not df.empty else "<DataFrame is empty>")
+            logging.info("DataFrame dtypes:")
+            logging.info(df.dtypes)
+            logging.info("First 200 bytes of buffer:")
             buffer.seek(0)
-            print(buffer.read(200))
+            logging.info(buffer.read(200))
             # Save first 10 rows to CSV for debugging
             debug_csv_name = f"debug_first_rows_{schema}_{table_name}.csv"
             try:
                 df.head(10).to_csv(debug_csv_name, index=False, encoding="utf-8-sig")
-                print(f"Saved first 10 rows to {debug_csv_name}")
+                logging.info(f"Saved first 10 rows to {debug_csv_name}")
             except Exception as save_err:
-                print(f"Failed to save debug CSV: {save_err}")
+                logging.info(f"Failed to save debug CSV: {save_err}")
             raise
 
 
@@ -463,7 +474,7 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
                 "heic",
             ]
         ):
-            print(f"Skipping file with unexpected path structure: {blob.name}")
+            logging.info(f"Skipping file with unexpected path structure: {blob.name}")
             continue
 
         db_name, schema_name, dir_name, dir_date = (
@@ -476,7 +487,7 @@ def list_csv_files_in_bucket(gcp, exclude_folders=[]):
         # skip excluded folders
         if exclude_folders:
             if schema_name in exclude_folders or dir_name in exclude_folders:
-                print(f"Skipping excluded folder: {blob.name}")
+                logging.info(f"Skipping excluded folder: {blob.name}")
                 continue
 
         if blob.name.endswith(".csv"):
@@ -503,11 +514,11 @@ def process_all_pipelines(exclude_folders=[]):
             not pipeline_config["bucket"]["credentials_path"]
             or not pipeline_config["db"]["host"]
         ):
-            print(f"Skipping {pipeline_name}: Incomplete configuration")
+            logging.info(f"Skipping {pipeline_name}: Incomplete configuration")
             continue
 
         try:
-            print(f"\nProcessing pipeline: {pipeline_name}")
+            logging.info(f"\nProcessing pipeline: {pipeline_name}")
 
             # Initialize GCP manager for this pipeline
             gcp_manager = GCPBucketManager(
@@ -520,18 +531,19 @@ def process_all_pipelines(exclude_folders=[]):
 
             # Skip if no files found
             if not structure["csv"] and not structure["images"]:
-                print(f"No files found in bucket {pipeline_name}")
+                logging.info(f"No csv/image files found in bucket {pipeline_name}")
+                run_geojson_gcp_to_db(gcp_manager,pipeline_config)
                 continue
 
             # Process the structure
+            run_geojson_gcp_to_db(gcp_manager,pipeline_config)
             process_database_structure(
                 gcp_manager, pipeline_config["db"], pipeline_name, structure
             )
 
-            print(f"Successfully processed pipeline: {pipeline_name}")
-
+            logging.info(f"Successfully processed pipeline: {pipeline_name}")
         except Exception as e:
-            print(f"Error processing pipeline {pipeline_name}: {e}")
+            logging.info(f"Error processing pipeline {pipeline_name}: {e}")
             continue
 
 
@@ -545,4 +557,4 @@ process_all_pipelines(
         "interpolated_income",
     ]
 )
-run_geojson_gcp_to_db()
+
