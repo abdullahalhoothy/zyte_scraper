@@ -8,6 +8,7 @@ Supports **batch requests** (up to 20 locations) with a **job queue** for scalab
 - Submit multiple locations per batch (`/analyze-batch`)
 - Poll job status (`/job/{id}`)
 - Cancel Job (`/job/{id}/cancel`)
+- Health check endpoint to verify Selenium Grid status (`/health`)
 - Results include traffic score, method, screenshot URL
 - Queue system ensures VPS stability under load
 - SQLite3 database logging, and Caching
@@ -53,7 +54,7 @@ docker-compose up --build
 ### Authentication
 Default admin user:
    - username: admin
-   - password: password123
+   - password: 123456
    (Change via ADMIN_PASSWORD env var.)
 
 ## Deployment
@@ -75,7 +76,7 @@ Default admin user:
    - `JWT_SECRET` → JWT signing key
    - `ADMIN_PASSWORD` → initial admin password
    - `RATE_LIMIT` → e.g. 10/minute
-   - `JOBQUEUE_MAX_JOBS` → concurrent jobs (default: 2)
-   - `JOBQUEUE_PER_JOB_CONCURRENCY` → Selenium workers per job (default: 3)
+   - `JOBQUEUE_MAX_JOBS` → concurrent jobs (default: 20)
+   - `JOBQUEUE_PER_JOB_CONCURRENCY` → Selenium workers per job (default: 4)
    - `SQLITE_DB_FILE` → SQLite file path (default: traffic.db)
-
+   - `SELENIUM_PROXY` → selenium proxy

@@ -3,7 +3,9 @@ import json
 from typing import Dict
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
 # os is not required here; filesystem access is handled by callers
+
 
 def pct_above(age, avg_median_age):
     diff = age - avg_median_age
@@ -22,6 +24,7 @@ def generate_bbox(center_lat, center_lng, radius_km=1):
         "top_lat": center_lat + delta,
     }
 
+
 def login_and_get_user():
     login_url = "http://37.27.195.216:8000/fastapi/login"
     login_payload = {
@@ -29,8 +32,8 @@ def login_and_get_user():
         "request_info": {},
         "request_body": {
             "email": "u_je_u2008@live.com",
-            "password": "12351235"
-        }
+            "password": "12351235",
+        },
     }
     with httpx.Client() as client:
         response = client.post(login_url, json=login_payload)
@@ -56,8 +59,8 @@ def fetch_demographics(center_lat, center_lng, user_id, id_token, radius_km=1):
                 "zoom_level": 12,
                 "user_id": user_id,
                 "population": True,
-                "income": True
-            }
+                "income": True,
+            },
         }
         response = client.post(url, json=payload, headers=headers)
         data = response.json()
@@ -92,25 +95,35 @@ def fetch_demographics(center_lat, center_lng, user_id, id_token, radius_km=1):
 
     processed = {
         "total_population": total_population,
-        "avg_density": round((sum(pop_density_values) / len(pop_density_values)), 2) if pop_density_values else 0,
-        "avg_median_age": round((sum(age_values) / len(age_values)), 2) if age_values else 0,
-        "avg_income": round((sum(income_values) / len(income_values)), 2) if income_values else 0,
+        "avg_density": (
+            round((sum(pop_density_values) / len(pop_density_values)), 2)
+            if pop_density_values
+            else 0
+        ),
+        "avg_median_age": (
+            round((sum(age_values) / len(age_values)), 2) if age_values else 0
+        ),
+        "avg_income": (
+            round((sum(income_values) / len(income_values)), 2)
+            if income_values
+            else 0
+        ),
     }
 
     avg_median_age = processed.get("avg_median_age", 0)
-    processed.update({
-        "percentage_age_above_20": pct_above(20, avg_median_age),
-        "percentage_age_above_25": pct_above(25, avg_median_age),
-        "percentage_age_above_30": pct_above(30, avg_median_age),
-        "percentage_age_above_35": pct_above(35, avg_median_age),
-        "percentage_age_above_40": pct_above(40, avg_median_age),
-        "percentage_age_above_45": pct_above(45, avg_median_age),
-        "percentage_age_above_50": pct_above(50, avg_median_age),
-    })
+    processed.update(
+        {
+            "percentage_age_above_20": pct_above(20, avg_median_age),
+            "percentage_age_above_25": pct_above(25, avg_median_age),
+            "percentage_age_above_30": pct_above(30, avg_median_age),
+            "percentage_age_above_35": pct_above(35, avg_median_age),
+            "percentage_age_above_40": pct_above(40, avg_median_age),
+            "percentage_age_above_45": pct_above(45, avg_median_age),
+            "percentage_age_above_50": pct_above(50, avg_median_age),
+        }
+    )
 
     return processed
-
-
 
 
 def _read_db_config():
@@ -123,7 +136,9 @@ def _read_db_config():
     return cfg
 
 
-def fetch_household_from_db(center_lat: float, center_lng: float, radius_km: float = 1) -> Dict:
+def fetch_household_from_db(
+    center_lat: float, center_lng: float, radius_km: float = 1
+) -> Dict:
     """
     Query Postgres household_all_features_v12 for features within a square bbox around the center point.
     Returns aggregated household statistics compatible with demographics result shape.
@@ -174,14 +189,22 @@ def fetch_household_from_db(center_lat: float, center_lng: float, radius_km: flo
 
     aggregated = {
         "total_households": total_households,
-        "avg_household_size": round(sum(avg_sizes) / len(avg_sizes), 2) if avg_sizes else 0.0,
-        "median_household_size": round(sum(median_sizes) / len(median_sizes), 2) if median_sizes else 0.0,
+        "avg_household_size": (
+            round(sum(avg_sizes) / len(avg_sizes), 2) if avg_sizes else 0.0
+        ),
+        "median_household_size": (
+            round(sum(median_sizes) / len(median_sizes), 2)
+            if median_sizes
+            else 0.0
+        ),
         "density_sum": round(sum(densities), 2),
     }
     return aggregated
 
 
-def fetch_housing_from_db(center_lat: float, center_lng: float, radius_km: float = 1) -> Dict:
+def fetch_housing_from_db(
+    center_lat: float, center_lng: float, radius_km: float = 1
+) -> Dict:
     """
     Query Postgres housing_all_features_v12 for features within a square bbox around the center point.
     Returns aggregated housing statistics.
@@ -263,11 +286,10 @@ def fetch_housing_from_db(center_lat: float, center_lng: float, radius_km: float
     return aggregated
 
 
-
 if __name__ == "__main__":
     # 6051728
     # latitude	longitude
     # 24.740278	46.67195
-   user_id, id_token = login_and_get_user()
-   demographics = fetch_demographics(24.740278, 46.67195, user_id, id_token)
-   print(demographics)
+    user_id, id_token = login_and_get_user()
+    demographics = fetch_demographics(24.740278, 46.67195, user_id, id_token)
+    print(demographics)

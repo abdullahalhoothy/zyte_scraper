@@ -220,9 +220,10 @@ def update_csv_with_results(
             f"Failed to replace {temp_path} with updated file {temp_updated_path}: {e}"
         )
 
+
 def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     """
-    Process records for traffic analysis and save to a dedicated CSV for a city.
+    Process records for traffic analysis using the API endpoint and save to a dedicated CSV for a city.
     """
     base_path = csv_path.rsplit(".csv", 1)[0]
     city_csv_path = f"{base_path}_{city}.csv"
@@ -250,56 +251,45 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     traffic_results = {}
     total_locations = len(locations)
 
+    # Get authentication token once
+    try:
+        auth_token = get_auth_token()
+        logger.info("Successfully authenticated with API")
+    except Exception as e:
+        logger.error(f"Authentication failed: {e}")
+        return output_path
+
+    # Process locations in batches
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
         logging.info(
             f"Processing traffic for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
         )
-        with ThreadPoolExecutor(max_workers=batch_size) as executor:
-            future_to_loc = {
-                executor.submit(
-                    lambda loc: GoogleMapsTrafficAnalyzer(
-                        cleanup_driver=True
-                    ).analyze_location_traffic(
-                        lat=loc["lat"],
-                        lng=loc["lng"],
-                        day_of_week="Monday",
-                        target_time="6:00PM",
-                    ),
-                    loc,
-                ): loc
-                for loc in batch
-            }
-            for future in as_completed(future_to_loc):
-                loc = future_to_loc[future]
+
+        try:
+            # Process batch through API
+            batch_results = process_traffic_batch(batch, auth_token)
+            traffic_results.update(batch_results)
+            processed_count += len(batch)
+
+        except Exception as e:
+            logger.error(f"Failed to process batch {batch_start}: {e}")
+            # Mark all locations in failed batch as errored
+            for loc in batch:
                 lat, lng = loc["lat"], loc["lng"]
-                try:
-                    traffic_result = future.result()
-                except Exception as e:
-                    logging.error(
-                        f"Traffic analysis failed for {lat}, {lng}: {e}"
-                    )
-                    traffic_result = {"score": 0, "error": str(e)}
-                
-                traffic_score = traffic_result.get("score", 0)
-                traffic_storefront_score = traffic_result.get("storefront_score", 0)
-                traffic_area_score = traffic_result.get("area_score", 0)
-                traffic_screenshot_path = traffic_result.get("screenshot_path", "")
-                # f:\git\zyte_scraper\cron_jobs\aquire_data\saudi_real_estate\step2\traffic_screenshots\traffic_24.677122_46.693966_Monday_6-00PM_pinned_frontscore=0_areascore=51.png
-                # i don't need the entire path just the file name
-                traffic_screenshot_filename = os.path.basename(traffic_screenshot_path)
                 coord_key = f"{lat}_{lng}"
                 traffic_results[coord_key] = {
-                    "traffic_score": traffic_score,
-                    "traffic_storefront_score": traffic_storefront_score,
-                    "traffic_area_score": traffic_area_score,
-                    "traffic_screenshot_filename": traffic_screenshot_filename,
+                    "traffic_score": 0,
+                    "traffic_storefront_score": 0,
+                    "traffic_area_score": 0,
+                    "traffic_screenshot_filename": "",
                     "traffic_analysis_date": datetime.now().strftime(
                         "%Y-%m-%d %H:%M:%S"
                     ),
                 }
-                processed_count += 1
-        logging.info(
+            processed_count += len(batch)
+
+        logger.info(
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, traffic_results, TRAFFIC_COLUMNS)
@@ -314,7 +304,6 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     )
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
-
 
 def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
     """
@@ -576,6 +565,6 @@ csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
 ensure_city_csv(csv_path)
 process_city_demographics(csv_path, 10)
-process_city_traffic(csv_path, 1)
+process_city_traffic(csv_path, 20)
 process_city_household(csv_path, batch_size=10, city=CITY_FILTER)
 process_city_housing(csv_path, batch_size=10, city=CITY_FILTER)

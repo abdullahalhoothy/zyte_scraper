@@ -1,29 +1,31 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from sqlalchemy import update
 from sqlalchemy.util import md5_hex
 
 from config import logger
 from db import Base, engine, get_db
-from models_db import Job, TrafficLog
+from models_db import Job, TrafficLog, User
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     db = next(get_db())
-    admin_pw = os.getenv("ADMIN_PASSWORD", "password123").strip()
+    admin_pw = os.getenv("ADMIN_PASSWORD", "123456").strip()
     if not db.query(User).filter_by(username="admin").first():
         db.add(User(username="admin", hashed_password=md5_hex(admin_pw)))
         db.commit()
     yield
 
 
-def update_job(job_id: str, user_id: int, **kwargs) -> None:
-    db = next(get_db())
+def update_job(db, job_id: str, user_id: int, **kwargs) -> None:
+    # db = next(get_db())
 
     try:
         stmt = (
@@ -37,8 +39,8 @@ def update_job(job_id: str, user_id: int, **kwargs) -> None:
         logger.warning(f"DB log failed to update job {job_id}: {e}")
 
 
-def get_job_record(job_id: str, user_id: int) -> dict | None:
-    db = next(get_db())
+def get_job_record(db, job_id: str, user_id: int) -> dict | None:
+    # db = next(get_db())
 
     try:
         job_record = (

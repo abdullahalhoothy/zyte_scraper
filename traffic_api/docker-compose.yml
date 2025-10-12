@@ -13,9 +13,11 @@ services:
       - SQLITE_DB_FILE=/app/data/traffic.db
       - SELENIUM_URL=http://selenium-hub:4444/wd/hub
       - JWT_SECRET=${JWT_SECRET:-jwt_secret}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-password123}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-123456}
       - RATE_LIMIT=${RATE_LIMIT:-10/minute}
       - SELENIUM_PROXY=${SELENIUM_PROXY:-}
+      - JOBQUEUE_MAX_JOBS=20           # Explicitly match grid capacity
+      - JOBQUEUE_PER_JOB_CONCURRENCY=4 # Match node session capacity
     volumes:
       - .:/app
       - ./static:/app/static
@@ -27,7 +29,9 @@ services:
     ports:
       - "4444:4444"
     environment:
-      - GRID_MAX_SESSION=4   # Maximum concurrent sessions the hub can handle
+      - GRID_MAX_SESSION=20           # Maximum concurrent sessions the hub can handle
+      - GRID_BROWSER_TIMEOUT=60       # Clean stuck sessions
+      - GRID_SESSION_TIMEOUT=300      # Max session duration
 
   chrome:
     image: selenium/node-chrome:124.0
@@ -38,7 +42,8 @@ services:
       - SE_EVENT_BUS_HOST=selenium-hub
       - SE_EVENT_BUS_PUBLISH_PORT=4442
       - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
-      - SE_NODE_MAX_SESSIONS=1  # Each node can handle 1 browser session
-    shm_size: 512m
+      - SE_NODE_MAX_SESSIONS=4        # 4 sessions per node
+      - SE_VNC_ENABLED=false
+    shm_size: 1gb
     deploy:
-      replicas: 4  # Run 4 Chrome nodes
+      replicas: 5                     # 5 nodes × 4 sessions = 20 concurrent

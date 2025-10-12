@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-import logging
 import os
 from datetime import timedelta
 
+import requests
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -13,7 +13,6 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 from tenacity import (
     retry,
@@ -33,7 +32,7 @@ from config import (
 from db import get_db
 from jobs import JobQueue, JobStatusEnum
 from models import MultiTrafficRequest, Token
-from models_db import TrafficLog, User
+from models_db import Job, TrafficLog
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer
 from utils import get_job_record, lifespan, update_job
 
@@ -69,7 +68,8 @@ def run_single_location_blocking(
     target_time,
     proxy=None,
 ):
-    analyzer = GoogleMapsTrafficAnalyzer(proxy=proxy)
+    selenium_url = os.getenv("SELENIUM_URL", "http://selenium-hub:4444/wd/hub")
+    analyzer = GoogleMapsTrafficAnalyzer(proxy=proxy, selenium_url=selenium_url)
     return analyzer.analyze_location_traffic(
         lat=lat,
         lng=lng,
@@ -125,11 +125,14 @@ async def login(
 @app.post("/analyze-points")
 @limiter.limit(RATE)
 async def analyze_batch(
-    request: Request, payload: MultiTrafficRequest, user=Depends(get_current_user)
+    request: Request,
+    payload: MultiTrafficRequest,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Submit a batch (up to 20 locations). Returns job_id immediately.
-    Client must poll /job/{job_id} to get status or results.
+    Client must poll /job/{job_uid} to get status or results.
     """
     if not payload.locations:
         raise HTTPException(status_code=400, detail="No locations provided")
@@ -151,49 +154,49 @@ async def analyze_batch(
         "request_base_url": str(request.base_url),
     }
 
-    job_id = job_queue.submit(job_payload)
+    job_uid = job_queue.submit(job_payload)
     status = JobStatusEnum.PENDING.value
 
     try:
-        job = Job(uuid=job_id, status=status, user_id=user.id)
-        db.add(log)
+        job = Job(uuid=job_uid, status=status, user_id=user.id)
+        db.add(job)
         db.commit()
     except Exception as e:
-        logger.warning(f"DB log failed to create job {job_id}: {e}")
+        logger.warning(f"DB log failed to create job {job_uid}: {e}")
 
-    return {"job_id": job_id, "status": status}
+    return {"job_id": job_uid, "status": status}
 
 
-@app.get("/job/{job_id}")
+@app.get("/job/{job_uid}")
 async def get_job(
-    job_id: str | None, user=Depends(get_current_user), db: Session = Depends(get_db)
+    job_uid: str | None, user=Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     Return the job status if still running,
     or full result when job is completed.
     """
 
-    job = job_queue.get(job_id)
+    job = job_queue.get(job_uid)
     if not job:
-        result = get_job_record()
+        result = get_job_record(db, job_uid, user.id)
         if result:
             return result
         raise HTTPException(status_code=404, detail="Job not found")
 
     status = job.get("status")
     remaining = job.get("remaining", 0)
-    response = {"job_id": job_id, "status": status.value}
+    response = {"job_id": job_uid, "status": status.value}
 
     if status in (JobStatusEnum.PENDING, JobStatusEnum.RUNNING):
         response["remaining"] = remaining
         return response
 
     if status == JobStatusEnum.FAILED:
-        job_queue.remove(job_id)
+        job_queue.remove(job_uid)
         error = job.get("error")
         response["error"] = error
         update_job(
-            job_id, user.id, status=status.value, remaining=remaining, error=error
+            db, job_uid, user.id, status=status.value, remaining=remaining, error=error
         )
         return response
 
@@ -201,6 +204,8 @@ async def get_job(
     if status in (JobStatusEnum.DONE, JobStatusEnum.CANCELED) and job.get("result"):
         if not job.get("_logged_to_db"):
             try:
+                job_id = db.query(Job).filter(Job.uuid == job_uid).first().id
+
                 results = job["result"].get("results", [])
                 payload_locations = job["payload"].get("locations", [])
                 for i, res in enumerate(results):
@@ -215,19 +220,19 @@ async def get_job(
                     )
                     db.add(log)
                 db.commit()
-                db.refresh(log)
                 job["_logged_to_db"] = True
             except Exception as e:
-                logger.warning(f"DB log failed for job {job_id}: {e}")
+                logger.warning(f"DB log failed for job {job_uid}: {e}")
 
-    job_queue.remove(job_id)
+    job_queue.remove(job_uid)
 
     response["remaining"] = remaining
     response["result"] = job.get("result")
     response["error"] = job.get("error")
 
     update_job(
-        job_id,
+        db,
+        job_uid,
         user.id,
         status=status.value,
         remaining=remaining,
@@ -237,9 +242,9 @@ async def get_job(
     return response
 
 
-@app.post("/job/{job_id}/cancel")
-async def cancel_job(job_id: str, user=Depends(get_current_user)):
-    job = job_queue.cancel(job_id)
+@app.post("/job/{job_uid}/cancel")
+async def cancel_job(job_uid: str, user=Depends(get_current_user), db=Depends(get_db)):
+    job = job_queue.cancel(job_uid)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -247,12 +252,45 @@ async def cancel_job(job_id: str, user=Depends(get_current_user)):
     remaining = job.get("remaining", 0)
     error = job.get("error")
 
-    update_job(job_id, user.id, status=status, remaining=remaining, error=error)
+    update_job(db, job_uid, user.id, status=status, remaining=remaining, error=error)
 
     return {
-        "job_id": job_id,
+        "job_id": job_uid,
         "status": status,
         "remaining": remaining,
         "result": job.get("result"),  # partial results included
         "error": error,
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint to verify Selenium Grid status
+    """
+    selenium_status = "unknown"
+    grid_capacity = 0
+    available_sessions = 0
+
+    try:
+        # Check Selenium Grid status
+        response = requests.get("http://selenium-hub:4444/status", timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            selenium_status = "healthy"
+            grid_capacity = data.get("value", {}).get("ready", False)
+            available_sessions = (
+                len(data.get("value", {}).get("nodes", [])) * 4
+            )  # 4 sessions per node
+    except Exception as e:
+        selenium_status = f"unhealthy: {str(e)}"
+
+    return {
+        "api": "healthy",
+        "selenium_grid": selenium_status,
+        "concurrent_capacity": grid_capacity,
+        "available_sessions": available_sessions,
+        "grid_max_sessions": 20,
+        "nodes_configured": 5,
+        "sessions_per_node": 4,
     }

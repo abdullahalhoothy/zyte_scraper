@@ -6,6 +6,7 @@ Provides traffic analysis using Google Maps screenshots and color detection
 import logging
 import math
 import os
+import re
 import shutil
 import time
 from collections import Counter
@@ -53,14 +54,14 @@ class GoogleMapsTrafficAnalyzer:
 
         Args:
             cleanup_driver: Whether to close/quit the webdriver after analysis
-            selenium_url: http://host:port/wd/hub (defaults to SELENIUM_URL env or http://selenium:4444/wd/hub)
+            selenium_url: http://host:port/wd/hub (defaults to SELENIUM_URL env or http://selenium-hub:4444/wd/hub)
             proxy: optional proxy host:port
         """
 
         self.driver = None
         self.cleanup_driver = cleanup_driver
         self.selenium_url = selenium_url or os.getenv(
-            "SELENIUM_URL", "http://selenium:4444/wd/hub"
+            "SELENIUM_URL", "http://selenium-hub:4444/wd/hub"
         )
         self.proxy = proxy or os.getenv("SELENIUM_PROXY", None)
 
@@ -122,6 +123,8 @@ class GoogleMapsTrafficAnalyzer:
                 command_executor=self.selenium_url,
                 options=chrome_options,
             )
+            # self.driver.set_page_load_timeout(30)
+            # self.driver.implicitly_wait(10)
             return self.driver
         except Exception as e:
             logger.error(
@@ -278,33 +281,41 @@ class GoogleMapsTrafficAnalyzer:
                 # Hour selection code can be added here if needed
                 if target_time is not None:
                     try:
-                        pos = self.TIME_MAP.get(
-                            target_time.upper().strip().replace(" ", ""), 0
-                        )
-                        actions = ActionChains(self.driver)
+                        target_time = target_time.strip().upper()
+                        if re.fullmatch(
+                            r"(1[0-2]|[1-9])(?::[0-5]\d)?[AP]M", target_time
+                        ):
+                            _time = re.sub(r":00(?=[AP]M)", "", target_time)
+                            pos = self.TIME_MAP.get(_time, 0)
 
-                        slider = WebDriverWait(self.driver, 3).until(
-                            EC.presence_of_element_located(
-                                (
-                                    By.XPATH,
-                                    '//*[@id="layer"]/div/div/div/div[2]/div/div[1]/span[2]',
+                            # pos = self.TIME_MAP.get(
+                            #     target_time.upper().strip().replace(" ", ""), 0
+                            # )
+
+                            actions = ActionChains(self.driver)
+
+                            slider = WebDriverWait(self.driver, 3).until(
+                                EC.presence_of_element_located(
+                                    (
+                                        By.XPATH,
+                                        '//*[@id="layer"]/div/div/div/div[2]/div/div[1]/span[2]',
+                                    )
                                 )
                             )
-                        )
 
-                        # Return the cursor to the beginning
-                        actions.click_and_hold(slider).move_by_offset(
-                            -35, 0
-                        ).release().perform()
-                        time.sleep(0.2)
+                            # Return the cursor to the beginning
+                            actions.click_and_hold(slider).move_by_offset(
+                                -35, 0
+                            ).release().perform()
+                            time.sleep(0.2)
 
-                        # Set the cursor to the specific time position
-                        actions.click_and_hold(slider).move_by_offset(
-                            pos, 0
-                        ).release().perform()
+                            # Set the cursor to the specific time position
+                            actions.click_and_hold(slider).move_by_offset(
+                                pos, 0
+                            ).release().perform()
 
-                        # wait for UI update
-                        time.sleep(1)
+                            # wait for UI update
+                            time.sleep(1)
                     except Exception:
                         logger.info("Failed to adjust the traffic time slider.")
 
