@@ -1,10 +1,9 @@
 from datetime import datetime
 import os
-import sys
 from time import sleep
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from step2_traffic_analysis import GoogleMapsTrafficAnalyzer
+from step2_traffic_analysis_api import get_auth_token, process_traffic_batch
 from step2_add_demographics import fetch_demographics
 from step2_add_demographics import login_and_get_user
 from step2_add_demographics import fetch_household_from_db
@@ -13,18 +12,18 @@ from step2_extract_listing_id import add_listing_ids_to_csv
 from step2_scrapy_transform_to_csv import process_real_estate_data
 import logging
 import argparse
+import sys
 parser = argparse.ArgumentParser()
 parser.add_argument("--log-file", help="Path to shared log file", required=False)
 args = parser.parse_args()
 
-
 if(args.log_file):
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..",".."))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
     sys.path.append(grandparent_dir)
     from logging_utils import setup_logging
     setup_logging(args.log_file)
-
+    
 # --- Centralized column definitions ---
 INPUT_COLUMNS = [
     "listing_id",
@@ -110,7 +109,7 @@ def ensure_city_csv(
         if (now - last_modified).days < 1:
             need_create = False
     if need_create:
-        logging.info(f"Creating {city} CSV: {city_csv_path}")
+        print(f"Creating {city} CSV: {city_csv_path}")
         first_chunk = True
         for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
             city_chunk = chunk[chunk["city"] == city].copy()
@@ -126,7 +125,7 @@ def ensure_city_csv(
                 )
         logging.info(f"{city} records saved to: {city_csv_path}")
     else:
-        logging.info(f"{city} CSV is up-to-date: {city_csv_path}")
+        print(f"{city} CSV is up-to-date: {city_csv_path}")
     return city_csv_path
 
 
@@ -230,17 +229,13 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     output_path = f"{base_path}_{city}_enriched_with_traffic.csv"
     temp_path = f"{base_path}_{city}_traffic_temp_processing.csv"
 
-    logging.info(f"Starting traffic analysis for {city} locations")
+    logging.info(f"Starting traffic analysis for {city} locations using API")
     logging.info(f"Input CSV: {city_csv_path}")
     logging.info(f"Enriched Output CSV: {output_path}")
 
     ensure_columns_in_csv(city_csv_path, TRAFFIC_COLUMNS, temp_path)
-    locations = get_locations_needing_processing(
-        temp_path, "traffic_score", city
-    )
-    logging.info(
-        f"Found {len(locations)} {city} locations needing traffic analysis"
-    )
+    locations = get_locations_needing_processing(temp_path, "traffic_score", city)
+    logging.info(f"Found {len(locations)} {city} locations needing traffic analysis")
     if len(locations) == 0:
         logging.info(f"All {city} locations already have traffic data")
         os.rename(temp_path, output_path)
@@ -254,9 +249,9 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     # Get authentication token once
     try:
         auth_token = get_auth_token()
-        logger.info("Successfully authenticated with API")
+        logging.info("Successfully authenticated with API")
     except Exception as e:
-        logger.error(f"Authentication failed: {e}")
+        logging.error(f"Authentication failed: {e}")
         return output_path
 
     # Process locations in batches
@@ -273,7 +268,7 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
             processed_count += len(batch)
 
         except Exception as e:
-            logger.error(f"Failed to process batch {batch_start}: {e}")
+            logging.error(f"Failed to process batch {batch_start}: {e}")
             # Mark all locations in failed batch as errored
             for loc in batch:
                 lat, lng = loc["lat"], loc["lng"]
@@ -289,19 +284,16 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
                 }
             processed_count += len(batch)
 
-        logger.info(
+        logging.info(
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, traffic_results, TRAFFIC_COLUMNS)
-        logging.info(
-            f"Batch progress saved: {processed_count} records updated in CSV"
-        )
+        logging.info(f"Batch progress saved: {processed_count} records updated in CSV")
         traffic_results = {}  # Clear for next batch
+
     logging.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logging.info(
-        f"Traffic analysis completed: {processed_count} locations processed"
-    )
+    logging.info(f"Traffic analysis completed: {processed_count} locations processed")
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
