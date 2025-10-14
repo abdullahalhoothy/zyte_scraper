@@ -4,14 +4,24 @@ import csv
 import os
 import numpy as np
 from datetime import datetime
-import logging
 import urllib3
 from time import sleep
 
-MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-log_file_path = os.path.join(MODULE_DIR, "household.log")
-logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='w', format='%(asctime)s - %(levelname)s - %(message)s')
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
+
+
+if(args.log_file):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..",".."))
+    sys.path.append(grandparent_dir)
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
+    
 
 COLUMN_MAPPING = {
     'level': 'Level',

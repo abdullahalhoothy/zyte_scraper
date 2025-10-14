@@ -8,7 +8,20 @@ from google.cloud import storage
 import geopandas as gpd
 from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
 
+
+if(args.log_file):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
+    sys.path.append(grandparent_dir)
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
 
 # ----------------------------
 # HELPERS
@@ -59,24 +72,24 @@ def import_geojson_to_postgis(bucket, gcs_path, table_prefix, engine, schema="sc
     dataset_type = table_prefix
     latest_prefix = get_latest_dir(bucket, gcs_path)
     if not latest_prefix:
-        print(f"No data found for {table_prefix}")
+        logging.info(f"No data found for {table_prefix}")
         return
 
     latest_prefix = latest_prefix + table_prefix
-    print(f"Latest path: {latest_prefix}")
+    logging.info(f"Latest path: {latest_prefix}")
 
     blobs = bucket.list_blobs(prefix=latest_prefix)
     for blob in blobs:
         if blob.name.endswith(".geojson") or blob.name.endswith(".json"):
             file_size_mb = blob.size / (1024 * 1024)
-            print(f"Processing: {blob.name} ({file_size_mb:.2f} MB)")
+            logging.info(f"Processing: {blob.name} ({file_size_mb:.2f} MB)")
 
             # Timeout adjustment
             timeout = 600 if file_size_mb > 50 else 300
             stream_to_disk = file_size_mb > 200
 
             if stream_to_disk:
-                print("Large file detected → streaming to disk...")
+                logging.info("Large file detected → streaming to disk...")
                 tmp_file_path = download_blob_large(blob, timeout=timeout, stream_to_disk=True)
                 gdf = gpd.read_file(tmp_file_path)
                 os.remove(tmp_file_path)
@@ -98,37 +111,48 @@ def import_geojson_to_postgis(bucket, gcs_path, table_prefix, engine, schema="sc
             # Write in batches to prevent connection drop
             try:
                 gdf.to_postgis(table_name, engine, if_exists="replace", chunksize=1000, schema=schema)
-                print(f"Loaded {blob.name} --> {schema}.{table_name}")
+                logging.info(f"Loaded {blob.name} --> {schema}.{table_name}")
             except OperationalError as e:
-                print(f"Connection lost while writing {table_name}. Reconnecting...")
+                logging.info(f"Connection lost while writing {table_name}. Reconnecting...")
                 engine.dispose()
                 engine.connect()
                 gdf.to_postgis(table_name, engine, if_exists="replace", chunksize=500, schema=schema)
 
-    print(f"Completed import for {dataset_type}")
+    logging.info(f"Completed import for {dataset_type}")
 
-
-def run_geojson_gcp_to_db():
-    """Run the complete import process."""
+def run_geojson_gcp_to_db(gcp_manager=None,pipeline_config=None):
+    """Run the complete import process (optionally using a provided GCPBucketManager)."""
+    
+    # Default bucket name
     GCP_BUCKET = "dev-s-locator"
+
+    # Define folder paths
     POPULATION_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/population/"
     AREA_INCOME_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/interpolated_income/"
     HOUSEHOLD_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/household/"
     HOUSING_PATH = "postgreSQL/dbo_operational/raw_schema_marketplace/housing/"
 
-    # Load secrets
-    with open("cron_jobs/secrets_database.json", "r") as f:
-        conf = json.load(f)
-    gcp_credentials_file = conf['dev-s-locator']['bucket']['credentials_path']
-    db_conf = conf['dev-s-locator']['db']
+    # If no GCP manager is provided, load config and create one
+    if gcp_manager is None:
+        with open("cron_jobs/secrets_database.json", "r") as f:
+            conf = json.load(f)
 
+        pipeline_conf = conf["dev-s-locator"]
+        gcp_credentials_file = pipeline_conf["bucket"]["credentials_path"]
+        db_conf = pipeline_conf["db"]
+
+        # Connect to GCS
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(GCP_BUCKET)
+    else:
+        # Use provided manager
+        pipeline_conf = pipeline_config
+        gcp_credentials_file = pipeline_conf["bucket"]["credentials_path"]
+        bucket = gcp_manager.bucket
+        db_conf = pipeline_conf["db"]
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcp_credentials_file
-
-    # Connect to GCS
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(GCP_BUCKET)
-
-    # Create SQLAlchemy engine with keepalive
+    logging.info('Running GCP to PostGIS for:', bucket.name)
+    # Create SQLAlchemy engine
     db_url = (
         f"postgresql+psycopg2://{db_conf['user']}:{db_conf['password']}"
         f"@{db_conf['host']}:{db_conf['port']}/{db_conf['dbname']}"
@@ -136,18 +160,14 @@ def run_geojson_gcp_to_db():
     engine = create_engine(
         db_url,
         pool_pre_ping=True,
-        pool_recycle=1200  # Reconnect every 30  mins to avoid stale connections
+        pool_recycle=1200  # reconnect every 30 minutes
     )
-
-    # Import datasets
     import_geojson_to_postgis(bucket, POPULATION_PATH, "population_json_files/", engine)
     import_geojson_to_postgis(bucket, AREA_INCOME_PATH, "area_income_geojson/", engine)
     import_geojson_to_postgis(bucket, HOUSING_PATH, "housing_json_files/", engine)
     import_geojson_to_postgis(bucket, HOUSEHOLD_PATH, "household_json_files/", engine)
 
-    print("All imports completed successfully!")
-
-
+    logging.info("All imports completed successfully!")
 # ----------------------------
 # MAIN
 # ----------------------------

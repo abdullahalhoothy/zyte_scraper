@@ -3,133 +3,136 @@ name: Aqar Real Estate Pipeline
 on:
   schedule:
     # Run every 7 days at 1:00 AM UTC
-    - cron: '0 1 */7 * *'
+    - cron: "0 1 */7 * *"
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Reason for manual pipeline run'
+        description: "Reason for manual pipeline run"
         required: false
-        default: 'Manual execution of Aqar real estate pipeline'
+        default: "Manual execution of Aqar real estate pipeline"
 
 jobs:
   run_aqar_real_estate_pipeline:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code for reference
-      uses: actions/checkout@v3
-      
-    - name: Setup swap on VPS
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USERNAME }}
-        key: ${{ secrets.VPS_SSH_KEY }}
-        script: |
-          cd /zyte_scraper
-          chmod +x setup_swap.sh
-          sudo ./setup_swap.sh
-    - name: Run Aqar real estate pipeline on VPS
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USERNAME }}
-        key: ${{ secrets.VPS_SSH_KEY }}
-        script: |
-          # Navigate to the project directory
-          cd /zyte_scraper
-          
-          # Pull latest code including the Aqar real estate pipeline
-          git stash
-          git pull
-          
-          # Make the pipeline executable (if needed)
-          chmod +x aqar_real_estate_pipeline.py
-          
-          # Make Chrome setup scripts executable
-          chmod +x install_chrome_cicd.py
-          chmod +x setup_chrome.py
-          
-          # Install required packages
-          echo "Installing required packages..."
-          sudo apt-get update
-          sudo apt-get install -y python3-pip python3-venv
-          
-          # Verify Python installation
-          echo "Checking Python installation..."
-          which python3
-          python3 --version
-          
-          # Remove existing venv if it exists but is incomplete
-          if [ -d "venv" ]; then
-            echo "Removing existing venv directory..."
-            rm -rf venv
-          fi
-          
-          # Create virtual environment
-          echo "Creating virtual environment..."
-          python3 -m venv venv
-          
-          # Verify venv creation
-          if [ ! -f "venv/bin/activate" ]; then
-            echo "Virtual environment creation failed!"
-            ls -la venv
-            exit 1
-          fi
-          
-          # Activate virtual environment
-          echo "Activating virtual environment..."
-          source venv/bin/activate
-          
-          # Verify we're in the virtual environment
-          echo "Python path after activation:"
-          which python
-          
-          # Install or update dependencies
-          echo "Installing dependencies..."
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          
-          # Install Chrome and ChromeDriver for traffic analysis
-          echo "Installing Chrome and ChromeDriver for traffic analysis..."
-          
-          # Use specialized CI/CD Chrome installation script
-          python install_chrome_cicd.py
-          
-          # Verify the installation was successful
-          if ! command -v google-chrome &> /dev/null || ! command -v chromedriver &> /dev/null; then
-            echo "❌ Chrome installation failed"
-            exit 1
-          else
-            echo "✅ Chrome installation successful"
-          fi
-          
-          # Set up virtual display for headless Chrome
-          echo "Setting up virtual display..."
-          export DISPLAY=:1
-          Xvfb :1 -screen 0 1024x768x16 &
-          sleep 2
-          
-          # Final verification
-          echo "Final verification..."
-          google-chrome --version
-          chromedriver --version
-          
-          # Execute the Aqar real estate pipeline in the background
-          echo "Starting pipeline in background..."
-          
-          # Set environment variables for Chrome
-          export DISPLAY=:1
-          export CHROME_BIN=/usr/bin/google-chrome
-          export CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
-          
-          # Start pipeline with Chrome environment
-          nohup python aqar_real_estate_pipeline.py > pipeline.log 2>&1 &
+      - name: Checkout code for reference
+        uses: actions/checkout@v3
 
-          # Show the last lines of the log for 100 seconds
-          echo "Showing pipeline log output for 100 seconds..."
-          timeout 100 tail -f pipeline.log
+      - name: Setup swap on VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /zyte_scraper
+            chmod +x setup_swap.sh
+            sudo ./setup_swap.sh
+      - name: Run Aqar real estate pipeline on VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Navigate to the project directory
+            cd /zyte_scraper
 
-          echo "Pipeline started. Check pipeline.log for full output."
+            # Pull latest code including the Aqar real estate pipeline
+            git stash
+            git pull
 
-          # Deactivate virtual environment
-          deactivate
+            # Make the pipeline executable (if needed)
+            chmod +x aqar_real_estate_pipeline.py
+
+            # Make Chrome setup scripts executable
+            chmod +x install_chrome_cicd.py
+            chmod +x setup_chrome.py
+
+            # Install required packages
+            echo "Installing required packages..."
+            sudo apt-get update
+            sudo apt-get install -y python3-pip python3-venv
+
+            # Verify Python installation
+            echo "Checking Python installation..."
+            which python3
+            python3 --version
+
+            # Remove existing venv if it exists but is incomplete
+            if [ -d "venv" ]; then
+              echo "Removing existing venv directory..."
+              rm -rf venv
+            fi
+
+            # Create virtual environment
+            echo "Creating virtual environment..."
+            python3 -m venv venv
+
+            # Verify venv creation
+            if [ ! -f "venv/bin/activate" ]; then
+              echo "Virtual environment creation failed!"
+              ls -la venv
+              exit 1
+            fi
+
+            # Activate virtual environment
+            echo "Activating virtual environment..."
+            source venv/bin/activate
+
+            # Verify we're in the virtual environment
+            echo "Python path after activation:"
+            which python
+
+            # Install or update dependencies
+            echo "Installing dependencies..."
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+
+            # Install Chrome and ChromeDriver for traffic analysis
+            echo "Installing Chrome and ChromeDriver for traffic analysis..."
+
+            # Use specialized CI/CD Chrome installation script
+            python install_chrome_cicd.py
+
+            # Verify the installation was successful
+            if ! command -v google-chrome &> /dev/null || ! command -v chromedriver &> /dev/null; then
+              echo "❌ Chrome installation failed"
+              exit 1
+            else
+              echo "✅ Chrome installation successful"
+            fi
+
+            # Set up virtual display for headless Chrome
+            echo "Setting up virtual display..."
+            export DISPLAY=:1
+            Xvfb :1 -screen 0 1024x768x16 &
+            sleep 2
+
+            # Final verification
+            echo "Final verification..."
+            google-chrome --version
+            chromedriver --version
+
+            # Execute the Aqar real estate pipeline in the background
+            echo "Starting pipeline in background..."
+
+            # Set environment variables for Chrome
+            export DISPLAY=:1
+            export CHROME_BIN=/usr/bin/google-chrome
+            export CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
+
+            # Start pipeline with Chrome environment
+            nohup python aqar_saudi_census_pipeline.py > pipeline.log 2>&1 &
+            nohup python aqar_zad_income_pipeline.py > pipeline.log 2>&1 &
+            nohup python aqar_real_estate_pipeline.py > pipeline.log 2>&1 &
+            nohup python aqar_db_enrichment_pipeline.py > pipeline.log 2>&1 &
+
+            # Show the last lines of the log for 100 seconds
+            echo "Showing pipeline log output for 100 seconds..."
+            timeout 100 tail -f pipeline.log
+
+            echo "Pipeline started. Check pipeline.log for full output."
+
+            # Deactivate virtual environment
+            deactivate

@@ -4,14 +4,26 @@ import csv
 import os
 import numpy as np
 from datetime import datetime
-import logging
 import urllib3
+from downloading_json_files import download_json_files_recursive
 from time import sleep
 
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
+
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
-log_file_path = os.path.join(MODULE_DIR, "population.log")
-logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='w', format='%(asctime)s - %(levelname)s - %(message)s')
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+if(args.log_file):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..",".."))
+    sys.path.append(grandparent_dir)
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
 
 COLUMN_MAPPING = {
     'level': 'Level',
@@ -159,7 +171,7 @@ def save_to_csv(features, filename, fieldnames):
 def main():
     # Process levels 8 through 14
     logging.info("Processing levels 8 through 14...")
-
+    success=False
     all_features = []
     for level in range(8, 17):
         logging.info(f"Processing level {level}...")
@@ -184,12 +196,28 @@ def main():
         logging.info("Files saved:")
         logging.info("- Level-specific CSV files: census_data_level_{8-14}.csv")
         logging.info("- Combined data in 'population.csv'")
+        success=True
     else:
         logging.info("No data was processed successfully.")
+        success=False
+    return success
 
 
 if __name__ == "__main__":
-    print("Script Starting....")
-    main()
+    try:
+        success = main()
+        if not success:
+            logging.warning("Main process returned no data. Running fallback download...")
+            bucket_name = "dev-s-locator"
+            source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/population/20250809"
+            download_json_files_recursive(bucket_name, source_prefix)
+
+    except Exception as e:
+        logging.error(f"Main process failed with error: {e}")
+        logging.info("Running fallback download...")
+        bucket_name = "dev-s-locator"
+        source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/population/20250809"
+        download_json_files_recursive(bucket_name, source_prefix)
+
 
 
