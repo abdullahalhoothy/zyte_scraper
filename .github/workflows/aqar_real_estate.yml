@@ -123,10 +123,10 @@ jobs:
             export CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
 
             # Start pipeline with Chrome environment
-            nohup python aqar_saudi_census_pipeline.py > pipeline.log 2>&1 &
-            nohup python aqar_zad_income_pipeline.py > pipeline.log 2>&1 &
-            nohup python aqar_real_estate_pipeline.py > pipeline.log 2>&1 &
-            nohup python aqar_db_enrichment_pipeline.py > pipeline.log 2>&1 &
+            nohup python aqar_saudi_census_pipeline.py >> pipeline.log 2>&1 &
+            nohup python aqar_zad_income_pipeline.py >> pipeline.log 2>&1 &
+            nohup python aqar_real_estate_pipeline.py >> pipeline.log 2>&1 &
+            nohup python aqar_db_enrichment_pipeline.py >> pipeline.log 2>&1 &
 
             # Show the last lines of the log for 100 seconds
             echo "Showing pipeline log output for 100 seconds..."
