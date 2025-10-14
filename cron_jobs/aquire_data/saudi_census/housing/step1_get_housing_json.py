@@ -14,6 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--log-file", help="Path to shared log file", required=False)
 args = parser.parse_args()
 
+MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 if(args.log_file):
     current_dir = os.path.dirname(os.path.abspath(__file__))
