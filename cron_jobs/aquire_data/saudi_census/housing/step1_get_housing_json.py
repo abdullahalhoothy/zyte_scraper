@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 import urllib3
 from time import sleep
+from downloading_housing_files import download_json_files_recursive
 
 import logging
 import argparse
@@ -177,7 +178,7 @@ def main():
     # Process levels 8 through 14
     logging.info("Processing levels 8 through 14...")
     # END: abpxx6d04wxr
-
+    success=False
     all_features = []
     for level in range(8, 17):
         logging.info(f"Processing level {level}...")
@@ -216,13 +217,28 @@ def main():
         logging.info("Files saved:")
         logging.info("- Level-specific CSV files: housing_data_level_{8-14}.csv")
         logging.info("- Combined data in 'housing.csv'")
+        success=True
 
     else:
+        success=False
         logging.info("No data was processed successfully.")
-
+    return success
 
 if __name__ == "__main__":
-    main()
+    try:
+        success = main()
+        if not success:
+            logging.warning("Main process returned no data. Running fallback download...")
+            bucket_name = "dev-s-locator"
+            source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/housing/20250529/housing_json_files"
+            download_json_files_recursive(bucket_name, source_prefix)
+
+    except Exception as e:
+        logging.error(f"Main process failed with error: {e}")
+        logging.info("Running fallback download...")
+        bucket_name = "dev-s-locator"
+        source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/housing/20250529/housing_json_files"
+        download_json_files_recursive(bucket_name, source_prefix)
 
 
 
