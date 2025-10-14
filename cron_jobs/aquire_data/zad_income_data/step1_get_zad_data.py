@@ -4,6 +4,21 @@ import json
 import requests
 from datetime import datetime
 
+import logging
+import argparse
+import sys
+parser = argparse.ArgumentParser()
+parser.add_argument("--log-file", help="Path to shared log file", required=False)
+args = parser.parse_args()
+
+
+if(args.log_file):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+    sys.path.append(grandparent_dir)
+    from logging_utils import setup_logging
+    setup_logging(args.log_file)
+
 
 def swap_coordinates(nested_coords):
     def recursive_swap(coords):
@@ -133,7 +148,7 @@ saudiFemale_income = response.json()["data"]["saudiFemale"]["facts"]
 nonSaudiMale_income = response.json()["data"]["nonSaudiMale"]["facts"]
 nonSaudiFemale_income = response.json()["data"]["nonSaudiFemale"]["facts"]
 
-print("Total Areas: {}".format(len(areas)))
+logging.info("Total Areas: {}".format(len(areas)))
 
 # Convert income data to dictionaries for easier lookup by area name
 income_data = {
@@ -153,7 +168,7 @@ for idx, data in enumerate(areas):
     area_id = data["area"]["id"]
     area_name = data["area"]["name"]
     
-    print(f"Processing Area: {area_name}")
+    logging.info(f"Processing Area: {area_name}")
 
     # Initialize area data dictionary
     area_properties = {
@@ -324,4 +339,4 @@ if geojson_features:
 
     with open(filename_json, "w", encoding="utf-8") as f:
         json.dump(final_geojson, f, ensure_ascii=False, indent=4)
-    print(f"\n📁 Saved collected Data to Geo-json file: {filename_json}")
+    logging.info(f"\n📁 Saved collected Data to Geo-json file: {filename_json}")

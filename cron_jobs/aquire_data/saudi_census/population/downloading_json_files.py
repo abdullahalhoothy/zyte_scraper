@@ -38,6 +38,6 @@ def download_json_files_recursive(bucket_name: str, source_prefix: str, destinat
         logging.error(f"Error happens when fetching data : {str(e)}")
 
 if __name__ == "__main__":
-    bucket_name = "s-locator"  
-    source_prefix = "misc/population_json_files/"  
+    bucket_name = "dev-s-locator"  
+    source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/population/20250809/population_json_files"
     download_json_files_recursive(bucket_name, source_prefix)
