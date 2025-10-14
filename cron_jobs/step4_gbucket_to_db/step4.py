@@ -526,15 +526,14 @@ def process_all_pipelines(exclude_folders=[]):
                 credentials_path=pipeline_config["bucket"]["credentials_path"],
             )
 
+            run_geojson_gcp_to_db(gcp_manager,pipeline_config)
             # Get the file structure
             structure = list_csv_files_in_bucket(gcp_manager, exclude_folders)
 
             # Skip if no files found
             if not structure["csv"] and not structure["images"]:
-                run_geojson_gcp_to_db(gcp_manager,pipeline_config)
                 logging.info(f"No files found in bucket {pipeline_name}")
                 continue
-            run_geojson_gcp_to_db(gcp_manager,pipeline_config)
             # Process the structure
             process_database_structure(
                 gcp_manager, pipeline_config["db"], pipeline_name, structure
@@ -557,4 +556,3 @@ process_all_pipelines(
         "interpolated_income",
     ]
 )
-run_geojson_gcp_to_db()
