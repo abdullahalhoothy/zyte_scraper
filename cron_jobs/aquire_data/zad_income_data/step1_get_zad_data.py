@@ -207,118 +207,120 @@ for idx, data in enumerate(areas):
 
     response_data = requests.post(url, headers=headers, data=payload_data)
     json_data = response_data.json()["data"]
-    
-    # Get coordinates and swap them
-    if len(json_data["area"].get("simplifiedShape", []))>2:
-        # manually verify which shapes are being sent
-        pause=1
-    raw_coordinates = json_data["area"].get("simplifiedShape", [])[0]
-    swapped_coordinates = swap_coordinates(raw_coordinates) if raw_coordinates else []
-    
-    area_properties["name"] = json_data["area"].get("name", "")
-    area_properties["type"] = json_data["area"].get("type", "")
+    if(json_data["area"]["simplifiedShape"]):
+      # Get coordinates and swap them
+      if len(json_data["area"].get("simplifiedShape", []))>2:
+          # manually verify which shapes are being sent
+          pause=1
+      raw_coordinates = json_data["area"].get("simplifiedShape", [])[0]
+      swapped_coordinates = swap_coordinates(raw_coordinates) if raw_coordinates else []
+      
+      area_properties["name"] = json_data["area"].get("name", "")
+      area_properties["type"] = json_data["area"].get("type", "")
 
-    # Get demographic data
-    payload_demo = json.dumps(
-        {
-            "operationName": "getDemographicData",
-            "variables": {"areas": [area_id]},
-            "query": """
-        query getDemographicData($areas: [String]!) {
-            totalPopulation: population(filters: {areas: $areas}, splits: []) {
-                facts { value }
-            }
-            malePopulation: population(filters: {areas: $areas, sexes: ["male"]}, splits: []) {
-                facts { value }
-            }
-            femalePopulation: population(filters: {areas: $areas, sexes: ["female"]}, splits: []) {
-                facts { value }
-            }
-            saudiPopulation: population(filters: {areas: $areas, nationalities: ["saudi"]}, splits: []) {
-                facts { value }
-            }
-            nonSaudiPopulation: population(filters: {areas: $areas, nationalities: ["nonSaudi"]}, splits: []) {
-                facts { value }
-            }
-
-            byGenderAndAgeGroupPopulation: population(filters: {areas: $areas}, splits: ["sex", "ageGroup"]) {
-                facts {
-                  splits {
-                    id
-                  }
-                  value
-                }
-            }
-            byNationalityAndAgeGroupPopulation: population(filters: {areas: $areas}, splits: ["nationality", "ageGroup"]) {
-                facts {
-                  splits {
-                    id
-                  }
-                  value
-                }
-            }
-            male: averageIncome(filters: {male: true, saudi: null, parentAreas: $areas}, orders: {id: "value", direction: "desc"}) {
-            facts {
-              area {
-                id
-                name(language: "ar")
+      # Get demographic data
+      payload_demo = json.dumps(
+          {
+              "operationName": "getDemographicData",
+              "variables": {"areas": [area_id]},
+              "query": """
+          query getDemographicData($areas: [String]!) {
+              totalPopulation: population(filters: {areas: $areas}, splits: []) {
+                  facts { value }
               }
-              value
+              malePopulation: population(filters: {areas: $areas, sexes: ["male"]}, splits: []) {
+                  facts { value }
+              }
+              femalePopulation: population(filters: {areas: $areas, sexes: ["female"]}, splits: []) {
+                  facts { value }
+              }
+              saudiPopulation: population(filters: {areas: $areas, nationalities: ["saudi"]}, splits: []) {
+                  facts { value }
+              }
+              nonSaudiPopulation: population(filters: {areas: $areas, nationalities: ["nonSaudi"]}, splits: []) {
+                  facts { value }
+              }
+
+              byGenderAndAgeGroupPopulation: population(filters: {areas: $areas}, splits: ["sex", "ageGroup"]) {
+                  facts {
+                    splits {
+                      id
+                    }
+                    value
+                  }
+              }
+              byNationalityAndAgeGroupPopulation: population(filters: {areas: $areas}, splits: ["nationality", "ageGroup"]) {
+                  facts {
+                    splits {
+                      id
+                    }
+                    value
+                  }
+              }
+              male: averageIncome(filters: {male: true, saudi: null, parentAreas: $areas}, orders: {id: "value", direction: "desc"}) {
+              facts {
+                area {
+                  id
+                  name(language: "ar")
+                }
+                value
+              }
             }
+
           }
+          """,
+          }
+      )
 
-        }
-        """,
-        }
-    )
+      demo_response = requests.post(url, headers=headers, data=payload_demo)
+      demo_data = demo_response.json().get("data", {})
 
-    demo_response = requests.post(url, headers=headers, data=payload_demo)
-    demo_data = demo_response.json().get("data", {})
+      def extract_value(key):
+          try:
+              return demo_data.get(key, {}).get("facts", [{}])[0].get("value", 0)
+          except (IndexError, TypeError):
+              return 0
 
-    def extract_value(key):
-        try:
-            return demo_data.get(key, {}).get("facts", [{}])[0].get("value", 0)
-        except (IndexError, TypeError):
-            return 0
+      total = extract_value("totalPopulation")
+      males = extract_value("malePopulation")
+      females = extract_value("femalePopulation")
+      saudis = extract_value("saudiPopulation")
+      non_saudis = extract_value("nonSaudiPopulation")
 
-    total = extract_value("totalPopulation")
-    males = extract_value("malePopulation")
-    females = extract_value("femalePopulation")
-    saudis = extract_value("saudiPopulation")
-    non_saudis = extract_value("nonSaudiPopulation")
+      # Add demographic data to properties
+      area_properties.update({
+          "Total Population": total,
+          "Total Males": males,
+          "Total Females": females,
+          "Total Saudis": saudis,
+          "Total Non-saudis": non_saudis,
+          "Male population (%)": f"{round((males / total) * 100, 2) if total else 0}%",
+          "Female population (%)": f"{round((females / total) * 100, 2) if total else 0}%",
+          "Saudis population (%)": f"{round((saudis / total) * 100, 2) if total else 0}%",
+      })
 
-    # Add demographic data to properties
-    area_properties.update({
-        "Total Population": total,
-        "Total Males": males,
-        "Total Females": females,
-        "Total Saudis": saudis,
-        "Total Non-saudis": non_saudis,
-        "Male population (%)": f"{round((males / total) * 100, 2) if total else 0}%",
-        "Female population (%)": f"{round((females / total) * 100, 2) if total else 0}%",
-        "Saudis population (%)": f"{round((saudis / total) * 100, 2) if total else 0}%",
-    })
+      # Add dynamic age group data
+      for byGender in demo_data["byGenderAndAgeGroupPopulation"]["facts"]:
+          key = byGender["splits"][0]["id"] + "_" + byGender["splits"][1]["id"]
+          area_properties[key] = byGender["value"]
 
-    # Add dynamic age group data
-    for byGender in demo_data["byGenderAndAgeGroupPopulation"]["facts"]:
-        key = byGender["splits"][0]["id"] + "_" + byGender["splits"][1]["id"]
-        area_properties[key] = byGender["value"]
+      for byNation in demo_data["byNationalityAndAgeGroupPopulation"]["facts"]:
+          key = byNation["splits"][0]["id"] + "_" + byNation["splits"][1]["id"]
+          area_properties[key] = byNation["value"]
 
-    for byNation in demo_data["byNationalityAndAgeGroupPopulation"]["facts"]:
-        key = byNation["splits"][0]["id"] + "_" + byNation["splits"][1]["id"]
-        area_properties[key] = byNation["value"]
-
-    # Create GeoJSON feature directly
-    if swapped_coordinates and area_id != "city-3":
-        feature = {
-            "type": "Feature",
-            "properties": area_properties,
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": swapped_coordinates
-            }
-        }
-        geojson_features.append(feature)
+      # Create GeoJSON feature directly
+      if swapped_coordinates and area_id != "city-3":
+          feature = {
+              "type": "Feature",
+              "properties": area_properties,
+              "geometry": {
+                  "type": "Polygon",
+                  "coordinates": swapped_coordinates
+              }
+          }
+          geojson_features.append(feature)
+    else:
+        logging.warning(f'Unable to get income data for {json_data["area"]["name"]}')
 
 # Create final GeoJSON
 final_geojson = {
@@ -334,7 +336,7 @@ if geojson_features:
     filename_json = os.path.join(
         census_path,
         "zad_output_geo_json_files",
-        f"Output_data_{timestamp}.geojson",
+        f"Output_data.geojson",
     )
 
     with open(filename_json, "w", encoding="utf-8") as f:
