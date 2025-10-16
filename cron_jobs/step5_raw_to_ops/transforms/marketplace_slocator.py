@@ -279,9 +279,9 @@ def create_enriched_demographic_table():
         avg_median_age REAL,
         avg_income REAL,
         income_category TEXT,
-        income_score_low REAL,
-        income_score_medium REAL,
-        income_score_high REAL,
+        low_income_score REAL,
+        medium_income_score REAL,
+        high_income_score REAL,
         percentage_age_above_20 REAL,
         percentage_age_above_25 REAL,
         percentage_age_above_30 REAL,
@@ -329,8 +329,11 @@ def create_enriched_demographic_table():
     ,
     income_stats AS (
         SELECT
-            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY avg_income) AS median_avg_income
+            PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY avg_income) AS p5_avg_income,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY avg_income) AS median_avg_income,
+            PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY avg_income) AS p99_avg_income
         FROM current_only
+        WHERE avg_income IS NOT NULL
     )
     INSERT INTO schema_marketplace."saudi_real_estate_demographic_enriched" (
         listing_id,
@@ -339,9 +342,9 @@ def create_enriched_demographic_table():
         avg_density,
         avg_median_age,
         avg_income,
-        income_score_low,
-        income_score_medium,
-        income_score_high,
+        low_income_score,
+        medium_income_score,
+        high_income_score,
         percentage_age_above_20,
         percentage_age_above_25,
         percentage_age_above_30,
@@ -360,10 +363,33 @@ def create_enriched_demographic_table():
         avg_density,
         avg_median_age,
         avg_income,
-        -- income scores: 100/(1+relative_distance) where relative_distance = ABS(avg_income - target)/NULLIF(target,0)
-        (100.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - (is_.median_avg_income * 0.75)) / NULLIF(is_.median_avg_income * 0.75,0) END)))::REAL AS income_score_low,
-        (100.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - is_.median_avg_income) / NULLIF(is_.median_avg_income,0) END)))::REAL AS income_score_medium,
-        (100.0 / (1.0 + (CASE WHEN is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL ELSE ABS(ci.avg_income - (is_.median_avg_income * 1.25)) / NULLIF(is_.median_avg_income * 1.25,0) END)))::REAL AS income_score_high,
+        -- low_income_score: 100 at p5, 0 at p99 (capped at extremes)
+        (CASE 
+            WHEN is_.p5_avg_income IS NULL OR is_.p99_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL
+            WHEN is_.p99_avg_income = is_.p5_avg_income THEN 50.0
+            WHEN ci.avg_income <= is_.p5_avg_income THEN 100.0
+            WHEN ci.avg_income >= is_.p99_avg_income THEN 0.0
+            ELSE 100.0 - (100.0 * (ci.avg_income - is_.p5_avg_income) / NULLIF(is_.p99_avg_income - is_.p5_avg_income, 0))
+        END)::REAL AS low_income_score,
+        -- medium_income_score: 100 at median, 50 at p5/p99 (capped triangle)
+        (CASE 
+            WHEN is_.p5_avg_income IS NULL OR is_.p99_avg_income IS NULL OR is_.median_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL
+            WHEN is_.p99_avg_income = is_.p5_avg_income THEN 100.0
+            WHEN ci.avg_income <= is_.p5_avg_income THEN 50.0
+            WHEN ci.avg_income >= is_.p99_avg_income THEN 50.0
+            WHEN ci.avg_income <= is_.median_avg_income THEN 
+                50.0 + (50.0 * (ci.avg_income - is_.p5_avg_income) / NULLIF(is_.median_avg_income - is_.p5_avg_income, 0))
+            ELSE 
+                100.0 - (50.0 * (ci.avg_income - is_.median_avg_income) / NULLIF(is_.p99_avg_income - is_.median_avg_income, 0))
+        END)::REAL AS medium_income_score,
+        -- high_income_score: 0 at p5, 100 at p99 (capped at extremes)
+        (CASE 
+            WHEN is_.p5_avg_income IS NULL OR is_.p99_avg_income IS NULL OR ci.avg_income IS NULL THEN NULL
+            WHEN is_.p99_avg_income = is_.p5_avg_income THEN 50.0
+            WHEN ci.avg_income <= is_.p5_avg_income THEN 0.0
+            WHEN ci.avg_income >= is_.p99_avg_income THEN 100.0
+            ELSE 100.0 * (ci.avg_income - is_.p5_avg_income) / NULLIF(is_.p99_avg_income - is_.p5_avg_income, 0)
+        END)::REAL AS high_income_score,
         percentage_age_above_20,
         percentage_age_above_25,
         percentage_age_above_30,
@@ -697,9 +723,9 @@ def historic_to_saudi_real_estate():
         percentage_age_above_50 REAL,
         demographics_analysis_date TEXT,
         income_category TEXT,
-        income_score_low REAL,
-        income_score_medium REAL,
-        income_score_high REAL,
+        low_income_score REAL,
+        medium_income_score REAL,
+        high_income_score REAL,
         -- housing columns
         total_housings BIGINT,
         residential_housings BIGINT,
@@ -745,7 +771,7 @@ def historic_to_saudi_real_estate():
         red.avg_median_age, red.avg_income, red.percentage_age_above_20, red.percentage_age_above_25,
         red.percentage_age_above_30, red.percentage_age_above_35, red.percentage_age_above_40,
         red.percentage_age_above_45, red.percentage_age_above_50, red.demographics_analysis_date,
-        red.income_category,red.income_score_low, red.income_score_medium, red.income_score_high,
+        red.income_category,red.low_income_score, red.medium_income_score, red.high_income_score,
         te.traffic_score, te.traffic_storefront_score, te.traffic_area_score, te.traffic_screenshot_filename,
         te.traffic_analysis_date,
         -- housing fields (aliased)
@@ -778,7 +804,7 @@ def historic_to_saudi_real_estate():
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
         percentage_age_above_50, demographics_analysis_date, income_category,
-        income_score_low, income_score_medium, income_score_high,
+        low_income_score, medium_income_score, high_income_score,
         -- housing columns
         total_housings, residential_housings, non_residential_housings, owned_housings,
         rented_housings, provided_housings, other_residential_housings, public_housing,
@@ -796,7 +822,7 @@ def historic_to_saudi_real_estate():
         percentage_age_above_20, percentage_age_above_25, percentage_age_above_30,
         percentage_age_above_35, percentage_age_above_40, percentage_age_above_45,
         percentage_age_above_50, demographics_analysis_date, income_category,
-        income_score_low, income_score_medium, income_score_high,
+        low_income_score, medium_income_score, high_income_score,
         -- housing values
         total_housings, residential_housings, non_residential_housings, owned_housings,
         rented_housings, provided_housings, other_residential_housings, public_housing,
@@ -809,3 +835,113 @@ def historic_to_saudi_real_estate():
         traffic_analysis_date
     FROM merged_enriched;
     """
+
+
+def enrich_all_area_income_versions():
+    """
+    Add income score columns to all area_income_all_features tables (v9 to v16)
+    This function updates all versions of the table at once
+    """
+    return """
+    -- Add income score columns to all area_income_all_features tables (v9 to v16)
+    -- This function calculates low_income_score, medium_income_score, and high_income_score
+    -- based on the income column in each table
+    
+    DO $$
+    DECLARE
+        v_table_version TEXT;
+        v_table_name TEXT;
+    BEGIN
+        -- Loop through versions v9 to v16
+        FOR v_table_version IN 
+            SELECT unnest(ARRAY['v9', 'v10', 'v11', 'v12', 'v13', 'v14', 'v15', 'v16'])
+        LOOP
+            v_table_name := 'area_income_all_features_' || v_table_version;
+            
+            -- Check if table exists
+            IF EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'schema_marketplace' 
+                AND table_name = v_table_name
+            ) THEN
+                RAISE NOTICE 'Processing table: %', v_table_name;
+                
+                -- Add columns if they don't exist
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                              WHERE table_schema = 'schema_marketplace' 
+                              AND table_name = v_table_name 
+                              AND column_name = 'low_income_score') THEN
+                    EXECUTE format('ALTER TABLE schema_marketplace.%I ADD COLUMN low_income_score REAL', v_table_name);
+                END IF;
+                
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                              WHERE table_schema = 'schema_marketplace' 
+                              AND table_name = v_table_name 
+                              AND column_name = 'medium_income_score') THEN
+                    EXECUTE format('ALTER TABLE schema_marketplace.%I ADD COLUMN medium_income_score REAL', v_table_name);
+                END IF;
+                
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                              WHERE table_schema = 'schema_marketplace' 
+                              AND table_name = v_table_name 
+                              AND column_name = 'high_income_score') THEN
+                    EXECUTE format('ALTER TABLE schema_marketplace.%I ADD COLUMN high_income_score REAL', v_table_name);
+                END IF;
+                
+                -- Update the scores using dynamic SQL
+                EXECUTE format('
+                    WITH income_stats AS (
+                        SELECT
+                            PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY income) AS p5_income,
+                            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY income) AS median_income,
+                            PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY income) AS p99_income
+                        FROM schema_marketplace.%I
+                        WHERE income IS NOT NULL
+                    )
+                    UPDATE schema_marketplace.%I AS target
+                    SET 
+                        -- low_income_score: 100 at p5, 0 at p99 (capped at extremes)
+                        low_income_score = (
+                            CASE 
+                                WHEN is_.p5_income IS NULL OR is_.p99_income IS NULL OR target.income IS NULL THEN NULL
+                                WHEN is_.p99_income = is_.p5_income THEN 50.0
+                                WHEN target.income <= is_.p5_income THEN 100.0
+                                WHEN target.income >= is_.p99_income THEN 0.0
+                                ELSE 100.0 - (100.0 * (target.income - is_.p5_income) / NULLIF(is_.p99_income - is_.p5_income, 0))
+                            END
+                        )::REAL,
+                        -- medium_income_score: 100 at median, 50 at p5/p99 (capped triangle)
+                        medium_income_score = (
+                            CASE 
+                                WHEN is_.p5_income IS NULL OR is_.p99_income IS NULL OR is_.median_income IS NULL OR target.income IS NULL THEN NULL
+                                WHEN is_.p99_income = is_.p5_income THEN 100.0
+                                WHEN target.income <= is_.p5_income THEN 50.0
+                                WHEN target.income >= is_.p99_income THEN 50.0
+                                WHEN target.income <= is_.median_income THEN 
+                                    50.0 + (50.0 * (target.income - is_.p5_income) / NULLIF(is_.median_income - is_.p5_income, 0))
+                                ELSE 
+                                    100.0 - (50.0 * (target.income - is_.median_income) / NULLIF(is_.p99_income - is_.median_income, 0))
+                            END
+                        )::REAL,
+                        -- high_income_score: 0 at p5, 100 at p99 (capped at extremes)
+                        high_income_score = (
+                            CASE 
+                                WHEN is_.p5_income IS NULL OR is_.p99_income IS NULL OR target.income IS NULL THEN NULL
+                                WHEN is_.p99_income = is_.p5_income THEN 50.0
+                                WHEN target.income <= is_.p5_income THEN 0.0
+                                WHEN target.income >= is_.p99_income THEN 100.0
+                                ELSE 100.0 * (target.income - is_.p5_income) / NULLIF(is_.p99_income - is_.p5_income, 0)
+                            END
+                        )::REAL
+                    FROM income_stats AS is_
+                ', v_table_name, v_table_name);
+                
+                RAISE NOTICE 'Completed processing table: %', v_table_name;
+            ELSE
+                RAISE NOTICE 'Table does not exist: %', v_table_name;
+            END IF;
+        END LOOP;
+    END
+    $$;
+    """
+
