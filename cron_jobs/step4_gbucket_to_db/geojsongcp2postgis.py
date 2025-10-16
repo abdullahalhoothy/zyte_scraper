@@ -151,7 +151,7 @@ def run_geojson_gcp_to_db(gcp_manager=None,pipeline_config=None):
         bucket = gcp_manager.bucket
         db_conf = pipeline_conf["db"]
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = gcp_credentials_file
-    logging.info('Running GCP to PostGIS for:', bucket.name)
+    logging.info(f'Running GCP to PostGIS for:{bucket.name}')
     # Create SQLAlchemy engine
     db_url = (
         f"postgresql+psycopg2://{db_conf['user']}:{db_conf['password']}"
