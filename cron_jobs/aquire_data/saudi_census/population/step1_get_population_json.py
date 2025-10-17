@@ -209,14 +209,14 @@ if __name__ == "__main__":
         if not success:
             logging.warning("Main process returned no data. Running fallback download...")
             bucket_name = "dev-s-locator"
-            source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/population/20250809"
+            source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/population/20250809/population_json_files"
             download_json_files_recursive(bucket_name, source_prefix)
 
     except Exception as e:
         logging.error(f"Main process failed with error: {e}")
         logging.info("Running fallback download...")
         bucket_name = "dev-s-locator"
-        source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/population/20250809"
+        source_prefix = "postgreSQL/dbo_operational/raw_schema_marketplace/population/20250809/population_json_files"
         download_json_files_recursive(bucket_name, source_prefix)
 
 
