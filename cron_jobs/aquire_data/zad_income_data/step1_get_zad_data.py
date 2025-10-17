@@ -330,7 +330,7 @@ final_geojson = {
 # Save to file
 if geojson_features:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    income_path = r"F:\git\zyte_scraper\cron_jobs\aquire_data\zad_income_data"
+    income_path = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(os.path.join(income_path,"zad_output_geo_json_files"), exist_ok=True)
     filename_json = os.path.join(
         income_path,
