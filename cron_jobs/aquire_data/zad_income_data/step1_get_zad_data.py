@@ -3,7 +3,6 @@ import csv
 import json
 import requests
 from datetime import datetime
-
 import logging
 import argparse
 import sys
@@ -18,7 +17,6 @@ if(args.log_file):
     sys.path.append(grandparent_dir)
     from logging_utils import setup_logging
     setup_logging(args.log_file)
-
 
 def swap_coordinates(nested_coords):
     def recursive_swap(coords):
@@ -207,6 +205,7 @@ for idx, data in enumerate(areas):
 
     response_data = requests.post(url, headers=headers, data=payload_data)
     json_data = response_data.json()["data"]
+    # This checks if geometry exists or not
     if(json_data["area"]["simplifiedShape"]):
       # Get coordinates and swap them
       if len(json_data["area"].get("simplifiedShape", []))>2:
@@ -320,7 +319,7 @@ for idx, data in enumerate(areas):
           }
           geojson_features.append(feature)
     else:
-        logging.warning(f'Unable to get income data for {json_data["area"]["name"]}')
+        logging.warning(f'Skipping feature: No geometry found for {json_data["area"]["name"]}')
 
 # Create final GeoJSON
 final_geojson = {
@@ -330,11 +329,11 @@ final_geojson = {
 
 # Save to file
 if geojson_features:
-    os.makedirs("zad_output_geo_json_files", exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    census_path = r"F:\git\zyte_scraper\cron_jobs\aquire_data\saudi_income_data"
+    income_path = r"F:\git\zyte_scraper\cron_jobs\aquire_data\zad_income_data"
+    os.makedirs(os.path.join(income_path,"zad_output_geo_json_files"), exist_ok=True)
     filename_json = os.path.join(
-        census_path,
+        income_path,
         "zad_output_geo_json_files",
         f"Output_data.geojson",
     )
