@@ -125,11 +125,14 @@ class GoogleMapsTrafficAnalyzer:
             )
             # self.driver.set_page_load_timeout(30)
             # self.driver.implicitly_wait(10)
-            logger.info(f"Successfully connected to Selenium Grid at {self.selenium_url}")
+            logger.info(
+                f"Successfully connected to Selenium Grid at {self.selenium_url}"
+            )
             return self.driver
         except Exception as e:
             error_msg = f"Could not connect to remote webdriver at {self.selenium_url}: {str(e)}. Ensure Selenium Grid is running and accessible."
             logger.error(error_msg)
+
             raise Exception(error_msg) from e
 
     def cleanup_webdriver(self):
@@ -839,9 +842,6 @@ class GoogleMapsTrafficAnalyzer:
 
         Returns:
             Dict containing traffic analysis results
-        
-        Raises:
-            Exception: When any step of the analysis fails
         """
         try:
             # Setup webdriver
@@ -860,6 +860,7 @@ class GoogleMapsTrafficAnalyzer:
                 target_time=target_time,
             )
             if not screenshot_path:
+                # raise Exception("Failed to capture screenshot")
                 error_msg = f"Failed to capture screenshot for location ({lat}, {lng}). Check Google Maps accessibility and browser automation."
                 logger.error(error_msg)
                 raise Exception(error_msg)
@@ -917,6 +918,7 @@ class GoogleMapsTrafficAnalyzer:
                 pinned_screenshot_path, lat, lng, storefront_direction
             )
             if not analysis:
+                # raise Exception("Failed to analyze traffic")
                 error_msg = f"Failed to analyze traffic in screenshot for location ({lat}, {lng}). Image analysis returned no results."
                 logger.error(error_msg)
                 raise Exception(error_msg)
@@ -981,7 +983,6 @@ class GoogleMapsTrafficAnalyzer:
         except Exception as e:
             error_msg = f"Google Maps traffic analysis failed for location ({lat}, {lng}): {str(e)}"
             logger.error(error_msg)
-            # Re-raise the exception with enhanced context instead of returning default values
             raise Exception(error_msg) from e
 
         finally:
