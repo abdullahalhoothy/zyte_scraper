@@ -5,22 +5,6 @@ import os
 from datetime import timedelta
 
 import requests
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.staticfiles import StaticFiles
-from slowapi import Limiter
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
-from sqlalchemy.orm import Session
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
-
 from auth import authenticate_user, create_access_token, get_current_user
 from config import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -30,10 +14,25 @@ from config import (
     logger,
 )
 from db import get_db
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from jobs import JobQueue, JobStatusEnum
 from models import MultiTrafficRequest, Token
 from models_db import Job, TrafficLog
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 from utils import get_job_record, lifespan, update_job
 
 # FastAPI app
@@ -68,24 +67,16 @@ def run_single_location_blocking(
     target_time,
     proxy=None,
 ):
-    try:
-        selenium_url = os.getenv("SELENIUM_URL", "http://selenium-hub:4444/wd/hub")
-        analyzer = GoogleMapsTrafficAnalyzer(proxy=proxy, selenium_url=selenium_url)
-        result = analyzer.analyze_location_traffic(
-            lat=lat,
-            lng=lng,
-            save_to_static=True,
-            storefront_direction=storefront_direction,
-            day_of_week=day_of_week,
-            target_time=target_time,
-        )
-        logger.info(f"Successfully analyzed traffic for location ({lat}, {lng})")
-        return result
-    except Exception as e:
-        error_msg = f"Failed to analyze location ({lat}, {lng}): {str(e)}"
-        logger.error(error_msg)
-        # Re-raise exception so it propagates to the job queue
-        raise Exception(error_msg) from e
+    selenium_url = os.getenv("SELENIUM_URL", "http://selenium-hub:4444/wd/hub")
+    analyzer = GoogleMapsTrafficAnalyzer(selenium_url=selenium_url, proxy=proxy)
+    return analyzer.analyze_location_traffic(
+        lat=lat,
+        lng=lng,
+        save_to_static=True,
+        storefront_direction=storefront_direction,
+        day_of_week=day_of_week,
+        target_time=target_time,
+    )
 
 
 job_queue = JobQueue(
@@ -201,16 +192,16 @@ async def get_job(
 
     if status == JobStatusEnum.FAILED:
         job_queue.remove(job_uid)
+
         error = job.get("error")
         response["error"] = error
         update_job(
             db, job_uid, user.id, status=status.value, remaining=remaining, error=error
         )
-        # Return HTTP 500 for failed jobs with detailed error message
-        logger.error(f"Job {job_uid} failed: {error}")
+
         raise HTTPException(
             status_code=500,
-            detail={"message": "Traffic analysis job failed", "error": error, "job_id": job_uid}
+            detail={"message": "Job execution failed", "details": response},
         )
 
     # DONE: log results into DB if not already logged
