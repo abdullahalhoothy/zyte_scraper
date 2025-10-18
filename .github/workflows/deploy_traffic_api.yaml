@@ -181,6 +181,10 @@ jobs:
 
             echo "🔍 Checking available disk space..."
             df -h .
+
+            echo "Ensure proper cleanup before deployment"
+            docker stop $(docker ps -q --filter "publish=8000") 2>/dev/null || true
+            sudo fuser -k 8000/tcp
             
             echo "🔄 Stopping existing containers..."
             # Try both docker-compose and docker compose for compatibility
@@ -258,9 +262,9 @@ jobs:
             # Test API health endpoint with retries
             echo "🧪 Testing API connectivity..."
             for i in {1..5}; do
-              if curl -f -s http://${{ secrets.VPS_HOST }}:8008/health > /dev/null ||
-                 curl -f -s http://${{ secrets.VPS_HOST }}:8008/docs > /dev/null ||
-                 curl -f -s http://${{ secrets.VPS_HOST }}:8008/ > /dev/null; then
+              if curl -f -s http://${{ secrets.VPS_HOST }}:8000/health > /dev/null ||
+                 curl -f -s http://${{ secrets.VPS_HOST }}:8000/docs > /dev/null ||
+                 curl -f -s http://${{ secrets.VPS_HOST }}:8000/ > /dev/null; then
                 echo "✅ API is responding (attempt $i)"
                 break
               else
