@@ -68,16 +68,24 @@ def run_single_location_blocking(
     target_time,
     proxy=None,
 ):
-    selenium_url = os.getenv("SELENIUM_URL", "http://selenium-hub:4444/wd/hub")
-    analyzer = GoogleMapsTrafficAnalyzer(proxy=proxy, selenium_url=selenium_url)
-    return analyzer.analyze_location_traffic(
-        lat=lat,
-        lng=lng,
-        save_to_static=True,
-        storefront_direction=storefront_direction,
-        day_of_week=day_of_week,
-        target_time=target_time,
-    )
+    try:
+        selenium_url = os.getenv("SELENIUM_URL", "http://selenium-hub:4444/wd/hub")
+        analyzer = GoogleMapsTrafficAnalyzer(proxy=proxy, selenium_url=selenium_url)
+        result = analyzer.analyze_location_traffic(
+            lat=lat,
+            lng=lng,
+            save_to_static=True,
+            storefront_direction=storefront_direction,
+            day_of_week=day_of_week,
+            target_time=target_time,
+        )
+        logger.info(f"Successfully analyzed traffic for location ({lat}, {lng})")
+        return result
+    except Exception as e:
+        error_msg = f"Failed to analyze location ({lat}, {lng}): {str(e)}"
+        logger.error(error_msg)
+        # Re-raise exception so it propagates to the job queue
+        raise Exception(error_msg) from e
 
 
 job_queue = JobQueue(
@@ -198,7 +206,12 @@ async def get_job(
         update_job(
             db, job_uid, user.id, status=status.value, remaining=remaining, error=error
         )
-        return response
+        # Return HTTP 500 for failed jobs with detailed error message
+        logger.error(f"Job {job_uid} failed: {error}")
+        raise HTTPException(
+            status_code=500,
+            detail={"message": "Traffic analysis job failed", "error": error, "job_id": job_uid}
+        )
 
     # DONE: log results into DB if not already logged
     if status in (JobStatusEnum.DONE, JobStatusEnum.CANCELED) and job.get("result"):

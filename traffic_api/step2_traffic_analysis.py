@@ -125,12 +125,12 @@ class GoogleMapsTrafficAnalyzer:
             )
             # self.driver.set_page_load_timeout(30)
             # self.driver.implicitly_wait(10)
+            logger.info(f"Successfully connected to Selenium Grid at {self.selenium_url}")
             return self.driver
         except Exception as e:
-            logger.error(
-                f"Could not connect to remote webdriver at {self.selenium_url}: {e}"
-            )
-            return None
+            error_msg = f"Could not connect to remote webdriver at {self.selenium_url}: {str(e)}. Ensure Selenium Grid is running and accessible."
+            logger.error(error_msg)
+            raise Exception(error_msg) from e
 
     def cleanup_webdriver(self):
         """Safely cleanup webdriver"""
@@ -222,9 +222,9 @@ class GoogleMapsTrafficAnalyzer:
                     ),
                 )
                 time.sleep(0.5)
-            except Exception:
-                logger.error(
-                    f"Failed to Cleaning unimportant Google Maps elements: {e}"
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"Failed to clean unimportant Google Maps elements: {cleanup_error}"
                 )
 
             # Zoom in once to trigger data refresh
@@ -839,12 +839,17 @@ class GoogleMapsTrafficAnalyzer:
 
         Returns:
             Dict containing traffic analysis results
+        
+        Raises:
+            Exception: When any step of the analysis fails
         """
         try:
             # Setup webdriver
             if self.cleanup_driver or not self.driver:
                 if not self.setup_webdriver():
-                    raise Exception("Failed to setup webdriver")
+                    error_msg = f"Failed to setup webdriver for location ({lat}, {lng}). Check if Selenium Grid is accessible at {self.selenium_url}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
 
             # Capture screenshot
             screenshot_path, live_traffic = self.capture_google_maps_screenshot(
@@ -855,7 +860,9 @@ class GoogleMapsTrafficAnalyzer:
                 target_time=target_time,
             )
             if not screenshot_path:
-                raise Exception("Failed to capture screenshot")
+                error_msg = f"Failed to capture screenshot for location ({lat}, {lng}). Check Google Maps accessibility and browser automation."
+                logger.error(error_msg)
+                raise Exception(error_msg)
 
             # Add pin to image for verification, passing storefront_direction
             pinned_screenshot_path = self.add_pin_to_image(
@@ -910,7 +917,9 @@ class GoogleMapsTrafficAnalyzer:
                 pinned_screenshot_path, lat, lng, storefront_direction
             )
             if not analysis:
-                raise Exception("Failed to analyze traffic")
+                error_msg = f"Failed to analyze traffic in screenshot for location ({lat}, {lng}). Image analysis returned no results."
+                logger.error(error_msg)
+                raise Exception(error_msg)
 
             # Delete the original screenshot, keep only the pinned version
             try:
@@ -970,13 +979,10 @@ class GoogleMapsTrafficAnalyzer:
             return result
 
         except Exception as e:
-            logger.error(f"Google Maps traffic analysis failed: {e}")
-            return {
-                "score": 0,
-                "method": "google_maps_screenshot",
-                "error": str(e),
-                "coordinates": {"lat": lat, "lng": lng},
-            }
+            error_msg = f"Google Maps traffic analysis failed for location ({lat}, {lng}): {str(e)}"
+            logger.error(error_msg)
+            # Re-raise the exception with enhanced context instead of returning default values
+            raise Exception(error_msg) from e
 
         finally:
             if self.cleanup_driver:

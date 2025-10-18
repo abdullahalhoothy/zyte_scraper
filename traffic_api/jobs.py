@@ -166,7 +166,11 @@ class JobQueue:
                         try:
                             res = future.result()
                         except Exception as e:
-                            res = {"error": str(e)}
+                            error_msg = f"Location analysis failed: {str(e)}"
+                            res = {"error": error_msg}
+                            # Log the error for this specific location
+                            from config import logger
+                            logger.error(f"Failed to analyze location at index {idx}: {error_msg}")
 
                         screenshot_path = res.get("screenshot_path") or res.get(
                             "pinned_screenshot_path"
@@ -192,12 +196,24 @@ class JobQueue:
 
                 if not job.get("cancel_requested"):
                     job["result"].update({"count": len(locations), "results": results})
-                    job["status"] = JobStatusEnum.DONE
+                    
+                    # Check if all locations failed
+                    failed_count = sum(1 for r in results if r and "error" in r and "score" not in r)
+                    if failed_count == len(locations) and len(locations) > 0:
+                        # All locations failed - mark job as FAILED
+                        error_messages = [r.get("error", "Unknown error") for r in results if r and "error" in r]
+                        job["error"] = f"All {len(locations)} location(s) failed. Errors: {'; '.join(error_messages[:3])}"  # Limit to first 3 errors
+                        job["status"] = JobStatusEnum.FAILED
+                    else:
+                        job["status"] = JobStatusEnum.DONE
 
                 job["updated_at"] = time.time()
 
             except Exception as e:
-                job["error"] = str(e)
+                from config import logger
+                error_msg = f"Job processing failed: {str(e)}"
+                logger.error(f"Job {job_id} encountered fatal error: {error_msg}")
+                job["error"] = error_msg
                 job["status"] = JobStatusEnum.FAILED
                 job["updated_at"] = time.time()
 
