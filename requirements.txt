@@ -55,3 +55,5 @@ geoalchemy2
 # Traffic Analysis Dependencies
 Pillow>=8.0.0
 opencv-python
+slowapi
+alembic
