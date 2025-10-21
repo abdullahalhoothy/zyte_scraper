@@ -11,13 +11,14 @@ from enum import Enum
 from typing import Any, Callable, Dict, List
 from urllib.parse import urljoin
 
-from config import logger
 from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
+
+from config import logger
 
 
 class JobStatusEnum(Enum):
@@ -54,8 +55,8 @@ class JobQueue:
     def __init__(
         self,
         worker_callable: Callable[..., Dict[str, Any]],
-        max_workers: int = 20,
-        per_job_concurrency: int = 4,
+        max_workers: int = 2,
+        per_job_concurrency: int = 20,
     ):
         """
         Args:
@@ -101,7 +102,7 @@ class JobQueue:
         self._queue.put(job_id)
         return job_id
 
-    def get(self, job_id: str) -> dict:
+    def get(self, job_id: str) -> Dict[str, Dict] | None:
         return self._jobs.get(job_id)
 
     def remove(self, job_id: str) -> None:
@@ -226,7 +227,7 @@ class JobQueue:
                 error_msg = f"The job failed: {str(e)}"
                 job["error"] = error_msg
                 job["status"] = JobStatusEnum.FAILED
-                logger.warning(f"Failed to complete The Job {idx}: {str(e)}")
+                logger.warning(f"Failed to complete The Job {job_id}: {str(e)}")
 
             finally:
                 job["updated_at"] = time.time()
