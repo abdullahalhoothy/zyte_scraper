@@ -71,5 +71,5 @@ def get_job_record(db, job_id: str, user_id: int) -> dict | None:
                 },
                 "error": job_record.error,
             }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"DB log failed to fetch job {job_id}: {e}")

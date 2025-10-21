@@ -37,6 +37,9 @@ source .venv/bin/active
 pip install -r requirements.txt
 
 pytest -v --disable-warnings
+
+# to run integration tests
+pytest -v -s --run-integration
 ```
 
 #### Setup Selenium Grid Server & API end-point Using Docker
@@ -68,7 +71,6 @@ Default admin user:
    - `VPS_USERNAME`
    - `VPS_SSH_KEY`
 
-
 ## Configuration
 
 #### Environment variables:
@@ -76,7 +78,7 @@ Default admin user:
    - `JWT_SECRET` → JWT signing key
    - `ADMIN_PASSWORD` → initial admin password
    - `RATE_LIMIT` → e.g. 10/minute
-   - `JOBQUEUE_MAX_JOBS` → concurrent jobs (default: 20)
-   - `JOBQUEUE_PER_JOB_CONCURRENCY` → Selenium workers per job (default: 4)
+   - `JOBQUEUE_MAX_JOBS` → concurrent jobs (default: 2)
+   - `JOBQUEUE_PER_JOB_CONCURRENCY` → Selenium workers per job (default: 20)
    - `SQLITE_DB_FILE` → SQLite file path (default: traffic.db)
    - `SELENIUM_PROXY` → selenium proxy
