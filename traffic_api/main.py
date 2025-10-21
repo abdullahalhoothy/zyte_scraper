@@ -5,6 +5,22 @@ import os
 from datetime import timedelta
 
 import requests
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
 from auth import authenticate_user, create_access_token, get_current_user
 from config import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -14,25 +30,10 @@ from config import (
     logger,
 )
 from db import get_db
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.staticfiles import StaticFiles
 from jobs import JobQueue, JobStatusEnum
 from models import MultiTrafficRequest, Token
 from models_db import Job, TrafficLog
-from slowapi import Limiter
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
-from sqlalchemy.orm import Session
 from step2_traffic_analysis import GoogleMapsTrafficAnalyzer
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 from utils import get_job_record, lifespan, update_job
 
 # FastAPI app
@@ -168,103 +169,132 @@ async def analyze_batch(
 
 @app.get("/job/{job_uid}")
 async def get_job(
-    job_uid: str | None, user=Depends(get_current_user), db: Session = Depends(get_db)
+    job_uid: str, user=Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     Return the job status if still running,
     or full result when job is completed.
     """
 
-    job = job_queue.get(job_uid)
-    if not job:
-        result = get_job_record(db, job_uid, user.id)
-        if result:
-            return result
-        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        job = job_queue.get(job_uid)
+        if not job:
+            result = get_job_record(db, job_uid, user.id)
+            if result:
+                return result
+            raise HTTPException(status_code=404, detail="Job not found")
 
-    status = job.get("status")
-    remaining = job.get("remaining", 0)
-    response = {"job_id": job_uid, "status": status.value}
+        status = job.get("status", JobStatusEnum.PENDING)
+        remaining = job.get("remaining", 0)
+        response = {"job_id": job_uid, "status": status.value}
 
-    if status in (JobStatusEnum.PENDING, JobStatusEnum.RUNNING):
-        response["remaining"] = remaining
-        return response
+        if status in (JobStatusEnum.PENDING, JobStatusEnum.RUNNING):
+            response["remaining"] = remaining
+            return response
 
-    if status == JobStatusEnum.FAILED:
+        if status == JobStatusEnum.FAILED:
+            job_queue.remove(job_uid)
+
+            error = job.get("error")
+            response["error"] = error
+            update_job(
+                db,
+                job_uid,
+                user.id,
+                status=status.value,
+                remaining=remaining,
+                error=error,
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail={"message": "Job execution failed", "details": response},
+            )
+
+        # DONE: log results into DB if not already logged
+        if status in (JobStatusEnum.DONE, JobStatusEnum.CANCELED) and job.get("result"):
+            if not job.get("_logged_to_db"):
+                try:
+                    job_id = db.query(Job).filter(Job.uuid == job_uid).first().id
+
+                    results = job["result"].get("results", [])
+                    payload_locations = job["payload"].get("locations", [])
+                    for i, res in enumerate(results):
+                        log = TrafficLog(
+                            lat=payload_locations[i].get("lat"),
+                            lng=payload_locations[i].get("lng"),
+                            score=res.get("score"),
+                            method=res.get("method"),
+                            screenshot_url=res.get("screenshot_url"),
+                            details=res,
+                            job_id=job_id,
+                        )
+                        db.add(log)
+                    db.commit()
+                    job["_logged_to_db"] = True
+                except Exception as e:
+                    logger.warning(f"DB log failed for job {job_uid}: {e}")
+
         job_queue.remove(job_uid)
 
-        error = job.get("error")
-        response["error"] = error
+        response["remaining"] = remaining
+        response["result"] = job.get("result")
+        response["error"] = job.get("error")
+
         update_job(
-            db, job_uid, user.id, status=status.value, remaining=remaining, error=error
+            db,
+            job_uid,
+            user.id,
+            status=status.value,
+            remaining=remaining,
+            error=job.get("error"),
         )
 
+        return response
+    except Exception as e:
+        error_msg = f"Failed to fetch Job {job_uid}: {e}"
+        logger.error(error_msg)
         raise HTTPException(
             status_code=500,
-            detail={"message": "Job execution failed", "details": response},
+            detail={
+                "message": "failed to fetch Job",
+                "details": {"job_id": job_uid, "error": error_msg},
+            },
         )
-
-    # DONE: log results into DB if not already logged
-    if status in (JobStatusEnum.DONE, JobStatusEnum.CANCELED) and job.get("result"):
-        if not job.get("_logged_to_db"):
-            try:
-                job_id = db.query(Job).filter(Job.uuid == job_uid).first().id
-
-                results = job["result"].get("results", [])
-                payload_locations = job["payload"].get("locations", [])
-                for i, res in enumerate(results):
-                    log = TrafficLog(
-                        lat=payload_locations[i].get("lat"),
-                        lng=payload_locations[i].get("lng"),
-                        score=res.get("score"),
-                        method=res.get("method"),
-                        screenshot_url=res.get("screenshot_url"),
-                        details=res,
-                        job_id=job_id,
-                    )
-                    db.add(log)
-                db.commit()
-                job["_logged_to_db"] = True
-            except Exception as e:
-                logger.warning(f"DB log failed for job {job_uid}: {e}")
-
-    job_queue.remove(job_uid)
-
-    response["remaining"] = remaining
-    response["result"] = job.get("result")
-    response["error"] = job.get("error")
-
-    update_job(
-        db,
-        job_uid,
-        user.id,
-        status=status.value,
-        remaining=remaining,
-        error=job.get("error"),
-    )
-
-    return response
 
 
 @app.post("/job/{job_uid}/cancel")
 async def cancel_job(job_uid: str, user=Depends(get_current_user), db=Depends(get_db)):
-    job = job_queue.cancel(job_uid)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        job = job_queue.cancel(job_uid)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
 
-    status = job.get("status").value
-    remaining = job.get("remaining", 0)
-    error = job.get("error")
+        status = job.get("status").value
+        remaining = job.get("remaining", 0)
+        error = job.get("error")
 
-    update_job(db, job_uid, user.id, status=status, remaining=remaining, error=error)
+        update_job(
+            db, job_uid, user.id, status=status, remaining=remaining, error=error
+        )
 
-    return {
-        "job_id": job_uid,
-        "status": status,
-        "remaining": remaining,
-        "result": job.get("result"),  # partial results included
-        "error": error,
-    }
+        return {
+            "job_id": job_uid,
+            "status": status,
+            "remaining": remaining,
+            "result": job.get("result"),  # partial results included
+            "error": error,
+        }
+    except Exception as e:
+        error_msg = f"Failed to cancel Job {job_uid}: {e}"
+        logger.error(error_msg)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "failed to cancel Job",
+                "details": {"job_id": job_uid, "error": error_msg},
+            },
+        )
 
 
 @app.get("/health")
