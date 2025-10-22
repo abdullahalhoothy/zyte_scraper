@@ -194,7 +194,8 @@ jobs:
             docker-compose pull --quiet 2>/dev/null || docker compose pull --quiet
             
             echo "🚀 Building and starting services..."
-            docker-compose up -d --build 2>/dev/null || docker compose up -d --build
+            # Force recreate containers to ensure updated images and configuration are applied
+            docker-compose up -d --build --force-recreate 2>/dev/null || docker compose up -d --build --force-recreate
             
             echo "⏳ Waiting for services to initialize..."
             sleep 10

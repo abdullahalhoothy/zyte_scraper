@@ -334,19 +334,13 @@ class GoogleMapsTrafficAnalyzer:
             screenshots_dir = os.path.join(current_dir, "traffic_screenshots")
             os.makedirs(screenshots_dir, exist_ok=True)
 
-            # Sanitize target_time for filename
-            safe_target_time = (
-                str(target_time).replace(":", "-").replace(" ", "_")
-                if target_time
-                else "no_time"
-            )
             safe_day_of_week = (
                 str(day_of_week).replace(" ", "_")
                 if day_of_week is not None
                 else "no_day"
             )
             screenshot_filename = (
-                f"traffic_{lat}_{lng}_{safe_day_of_week}_{safe_target_time}.png"
+                f"traffic_{lat}_{lng}_{safe_day_of_week}.png"
             )
             screenshot_path = os.path.join(screenshots_dir, screenshot_filename)
 
