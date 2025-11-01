@@ -14,7 +14,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-API_BASE_URL = "http://localhost:8000"  # Adjust if needed
+API_BASE_URL = "http://49.12.190.229:8000"  # Adjust if needed
 LOGIN_ENDPOINT = f"{API_BASE_URL}/login"
 ANALYZE_ENDPOINT = f"{API_BASE_URL}/analyze-traffic"
 JOB_STATUS_ENDPOINT = f"{API_BASE_URL}/job"
