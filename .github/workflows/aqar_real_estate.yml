@@ -21,6 +21,11 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          env:
+            GGL_BUCKET_SA: ${{ secrets.GGL_BUCKET_SA }}
+            SECRETS_DATABASE: ${{ secrets.SECRETS_DATABASE }}
+            SECRETS_GMAP: ${{ secrets.SECRETS_GMAP }}
+            SECRET_SAUDI_REAL_ESTATE: ${{ secrets.SECRET_SAUDI_REAL_ESTATE }}
           script: |
             cd /
             if [ -d "zyte_scraper" ]; then
@@ -30,6 +35,12 @@ jobs:
             echo "Cloning repository..."
             git clone https://github.com/abdullahalhoothy/zyte_scraper.git
             cd zyte_scraper
+
+            # Create secret files
+            echo "$GGL_BUCKET_SA" > cron_jobs/ggl_bucket_sa.json
+            echo "$SECRETS_DATABASE" > cron_jobs/secrets_database.json
+            echo "$SECRETS_GMAP" > cron_jobs/secrets_gmap.json
+            echo "$SECRET_SAUDI_REAL_ESTATE" > cron_jobs/secret_saudi_real_estate.json
 
             chmod +x setup_swap.sh
             sudo ./setup_swap.sh
