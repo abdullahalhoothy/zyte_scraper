@@ -15,32 +15,24 @@ jobs:
   run_aqar_real_estate_pipeline:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code for reference
-        uses: actions/checkout@v3
-
-      - name: Setup swap on VPS
+      - name: Setup VPS and run Aqar real estate pipeline
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /zyte_scraper
+            cd /
+            if [ -d "zyte_scraper" ]; then
+              echo "Removing existing zyte_scraper directory..."
+              rm -rf zyte_scraper
+            fi
+            echo "Cloning repository..."
+            git clone https://github.com/abdullahalhoothy/zyte_scraper.git
+            cd zyte_scraper
+
             chmod +x setup_swap.sh
             sudo ./setup_swap.sh
-      - name: Run Aqar real estate pipeline on VPS
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            # Navigate to the project directory
-            cd /zyte_scraper
-
-            # Pull latest code including the Aqar real estate pipeline
-            git stash
-            git pull
 
             # Make the pipeline executable (if needed)
             chmod +x aqar_real_estate_pipeline.py
