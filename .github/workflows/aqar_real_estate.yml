@@ -17,15 +17,16 @@ jobs:
     steps:
       - name: Setup VPS and run Aqar real estate pipeline
         uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          env:
+        env:
             GGL_BUCKET_SA: ${{ secrets.GGL_BUCKET_SA }}
             SECRETS_DATABASE: ${{ secrets.SECRETS_DATABASE }}
             SECRETS_GMAP: ${{ secrets.SECRETS_GMAP }}
             SECRET_SAUDI_REAL_ESTATE: ${{ secrets.SECRET_SAUDI_REAL_ESTATE }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GGL_BUCKET_SA,SECRETS_DATABASE,SECRETS_GMAP,SECRET_SAUDI_REAL_ESTATE
           script: |
             cd /
             if [ -d "zyte_scraper" ]; then
