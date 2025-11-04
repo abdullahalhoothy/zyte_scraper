@@ -19,7 +19,7 @@ args = parser.parse_args()
 
 if(args.log_file):
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..",".."))
     sys.path.append(grandparent_dir)
     from logging_utils import setup_logging
     setup_logging(args.log_file)
@@ -127,6 +127,49 @@ def ensure_city_csv(
     else:
         print(f"{city} CSV is up-to-date: {city_csv_path}")
     return city_csv_path
+
+def ensure_saudi_csv(
+    csv_path,
+    category=CATEGORY_FILTER,
+    columns=INPUT_COLUMNS,
+    chunk_size=CHUNK_SIZE,
+):
+    """
+    Ensure a Saudi Arabia-wide CSV exists and is up-to-date (created if missing or older than 1 day).
+    Filters records by category and saves to a new CSV file with selected columns if needed.
+    Returns the path to the Saudi Arabia CSV.
+    """
+    base_path = csv_path.rsplit(".csv", 1)[0]
+    saudi_csv_path = f"{base_path}_saudi.csv"
+    need_create = True
+
+    # Check if the file already exists and is fresh
+    if os.path.exists(saudi_csv_path):
+        last_modified = datetime.fromtimestamp(os.path.getmtime(saudi_csv_path))
+        now = datetime.now()
+        if (now - last_modified).days < 1:
+            need_create = False
+
+    # Create or refresh file if needed
+    if need_create:
+        print(f"Creating Saudi Arabia CSV: {saudi_csv_path}")
+        first_chunk = True
+        for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
+            # Only filter by category
+            saudi_chunk = chunk[chunk["category"] == category].copy()
+            saudi_chunk = saudi_chunk[columns]
+
+            if first_chunk:
+                saudi_chunk.to_csv(saudi_csv_path, index=False, mode="w")
+                first_chunk = False
+            else:
+                saudi_chunk.to_csv(saudi_csv_path, index=False, mode="a", header=False)
+
+        logging.info(f"Saudi Arabia records saved to: {saudi_csv_path}")
+    else:
+        print(f"Saudi Arabia CSV is up-to-date: {saudi_csv_path}")
+
+    return saudi_csv_path
 
 
 def ensure_columns_in_csv(csv_path, columns, temp_path, chunk_size=CHUNK_SIZE):
@@ -297,6 +340,85 @@ def process_city_traffic(csv_path: str, batch_size: int, city=CITY_FILTER):
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
+def process_saudi_traffic(csv_path: str, batch_size: int):
+    """
+    Process records for traffic analysis across all of Saudi Arabia using the API endpoint.
+    """
+    base_path = csv_path.rsplit(".csv", 1)[0]
+    saudi_csv_path = f"{base_path}_saudi.csv"
+    output_path = f"{base_path}_saudi_enriched_with_traffic.csv"
+    temp_path = f"{base_path}_saudi_traffic_temp_processing.csv"
+
+    logging.info("Starting traffic analysis for all Saudi Arabia locations using API")
+    logging.info(f"Input CSV: {saudi_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
+
+    ensure_columns_in_csv(saudi_csv_path, TRAFFIC_COLUMNS, temp_path)
+    locations = get_locations_needing_processing(temp_path, "traffic_score")
+    logging.info(f"Found {len(locations)} locations needing traffic analysis")
+
+    if len(locations) == 0:
+        logging.info("All locations already have traffic data")
+        os.rename(temp_path, output_path)
+        logging.info(f"All data saved to: {output_path}")
+        return output_path
+
+    processed_count = 0
+    traffic_results = {}
+    total_locations = len(locations)
+
+    # Get authentication token once
+    try:
+        auth_token = get_auth_token()
+        logging.info("Successfully authenticated with API")
+    except Exception as e:
+        logging.error(f"Authentication failed: {e}")
+        return output_path
+
+    # Process locations in batches
+    for batch_start in range(0, total_locations, batch_size):
+        batch = locations[batch_start : batch_start + batch_size]
+        logging.info(
+            f"Processing traffic for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+        )
+
+        try:
+            # Process batch through API
+            batch_results = process_traffic_batch(batch, auth_token)
+            traffic_results.update(batch_results)
+            processed_count += len(batch)
+
+        except Exception as e:
+            logging.error(f"Failed to process batch {batch_start}: {e}")
+            # Mark all locations in failed batch as errored
+            for loc in batch:
+                lat, lng = loc["lat"], loc["lng"]
+                coord_key = f"{lat}_{lng}"
+                traffic_results[coord_key] = {
+                    "traffic_score": 0,
+                    "traffic_storefront_score": 0,
+                    "traffic_area_score": 0,
+                    "traffic_screenshot_filename": "",
+                    "traffic_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                }
+            processed_count += len(batch)
+
+        logging.info(
+            f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
+        )
+        update_csv_with_results(temp_path, traffic_results, TRAFFIC_COLUMNS)
+        logging.info(f"Batch progress saved: {processed_count} records updated in CSV")
+        traffic_results = {}  # Clear for next batch
+
+    logging.info("Finalizing enriched output file...")
+    os.rename(temp_path, output_path)
+    logging.info(f"Traffic analysis completed: {processed_count} locations processed")
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
+
+    return output_path
+
 def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
     """
     Process records for demographic analysis and save to a dedicated CSV for a city.
@@ -371,6 +493,79 @@ def process_city_demographics(csv_path: str, batch_size: int, city=CITY_FILTER):
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
+def process_saudi_demographics(csv_path: str, batch_size: int):
+    """
+    Process records for demographic analysis across all of Saudi Arabia.
+    Creates an enriched CSV containing demographic data for all locations.
+    """
+    base_path = csv_path.rsplit(".csv", 1)[0]
+    saudi_csv_path = f"{base_path}_saudi.csv"
+    output_path = f"{base_path}_saudi_enriched_with_demographics.csv"
+    temp_path = f"{base_path}_saudi_temp_demographics.csv"
+
+    logging.info("Starting demographic analysis for all Saudi Arabia locations")
+    logging.info(f"Input CSV: {saudi_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
+
+    # Ensure demographic columns exist
+    ensure_columns_in_csv(saudi_csv_path, DEMOGRAPHIC_COLUMNS, temp_path)
+
+    # Get all locations needing demographics (no city filter)
+    locations = get_locations_needing_processing(temp_path, "total_population")
+
+    logging.info(f"Found {len(locations)} locations needing demographic analysis")
+    if len(locations) == 0:
+        logging.info("All locations already have demographic data")
+        os.rename(temp_path, output_path)
+        logging.info(f"All data saved to: {output_path}")
+        return output_path
+
+    processed_count = 0
+    demo_results = {}
+    total_locations = len(locations)
+
+    for batch_start in range(0, total_locations, batch_size):
+        batch = locations[batch_start : batch_start + batch_size]
+        logging.info(
+            f"Processing demographics for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+        )
+
+        user_id, id_token = login_and_get_user()
+
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            future_to_loc = {
+                executor.submit(
+                    fetch_demographics,
+                    loc["lat"],
+                    loc["lng"],
+                    user_id,
+                    id_token,
+                ): loc
+                for loc in batch
+            }
+
+            for future in as_completed(future_to_loc):
+                loc = future_to_loc[future]
+                lat, lng = loc["lat"], loc["lng"]
+                demo_result = future.result()
+                demo_results[f"{lat}_{lng}"] = {
+                    **demo_result,
+                    "demographics_analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                processed_count += 1
+
+        logging.info(f"Progress checkpoint: {processed_count}/{total_locations} locations processed")
+        update_csv_with_results(temp_path, demo_results, DEMOGRAPHIC_COLUMNS)
+        logging.info(f"Batch progress saved: {processed_count} records updated in CSV")
+
+        demo_results = {}  # Clear for next batch
+
+    logging.info("Finalizing enriched output file...")
+    os.rename(temp_path, output_path)
+    logging.info(f"Demographic analysis completed: {processed_count} locations processed")
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
+
+    return output_path
 
 def process_city_household(csv_path: str, batch_size: int, city=CITY_FILTER):
     """
@@ -457,6 +652,92 @@ def process_city_household(csv_path: str, batch_size: int, city=CITY_FILTER):
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
+def process_saudi_household(csv_path: str, batch_size: int):
+    """
+    Process records for household analysis across all of Saudi Arabia.
+    Uses database queries instead of remote API calls.
+    """
+    base_path = csv_path.rsplit(".csv", 1)[0]
+    saudi_csv_path = f"{base_path}_saudi.csv"
+    output_path = f"{base_path}_saudi_enriched_with_household.csv"
+    temp_path = f"{base_path}_saudi_temp_household.csv"
+
+    logging.info("Starting household analysis for all Saudi Arabia locations")
+    logging.info(f"Input CSV: {saudi_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
+
+    ensure_columns_in_csv(saudi_csv_path, HOUSEHOLD_COLUMNS, temp_path)
+    locations = get_locations_needing_processing(temp_path, "total_households")
+    logging.info(f"Found {len(locations)} locations needing household analysis")
+
+    if len(locations) == 0:
+        logging.info("All locations already have household data")
+        os.rename(temp_path, output_path)
+        logging.info(f"All data saved to: {output_path}")
+        return output_path
+
+    processed_count = 0
+    hh_results = {}
+    total_locations = len(locations)
+
+    for batch_start in range(0, total_locations, batch_size):
+        batch = locations[batch_start : batch_start + batch_size]
+        logging.info(
+            f"Processing household for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+        )
+
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            future_to_loc = {
+                executor.submit(
+                    fetch_household_from_db,
+                    loc["lat"],
+                    loc["lng"],
+                    1,
+                ): loc
+                for loc in batch
+            }
+
+            for future in as_completed(future_to_loc):
+                loc = future_to_loc[future]
+                lat, lng = loc["lat"], loc["lng"]
+                try:
+                    hh_result = future.result()
+                except Exception as e:
+                    logging.error(f"Household DB query failed for {lat}, {lng}: {e}")
+                    hh_result = {
+                        "total_households": 0,
+                        "avg_household_size": 0.0,
+                        "median_household_size": 0.0,
+                        "density_sum": 0.0,
+                        "features_count": 0,
+                    }
+
+                coord_key = f"{lat}_{lng}"
+                hh_results[coord_key] = {
+                    **hh_result,
+                    "household_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                }
+                processed_count += 1
+
+        logging.info(
+            f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
+        )
+        update_csv_with_results(temp_path, hh_results, HOUSEHOLD_COLUMNS)
+        logging.info(
+            f"Batch progress saved: {processed_count} records updated in CSV"
+        )
+        hh_results = {}  # Clear for next batch
+
+    logging.info("Finalizing enriched output file...")
+    os.rename(temp_path, output_path)
+    logging.info(
+        f"Household analysis completed: {processed_count} locations processed"
+    )
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
+
+    return output_path
 
 def process_city_housing(csv_path: str, batch_size: int, city=CITY_FILTER):
     """
@@ -550,13 +831,112 @@ def process_city_housing(csv_path: str, batch_size: int, city=CITY_FILTER):
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
     return output_path
 
+def process_saudi_housing(csv_path: str, batch_size: int):
+    """
+    Process records for housing analysis across all of Saudi Arabia.
+    Uses database queries instead of remote API calls.
+    """
+    base_path = csv_path.rsplit(".csv", 1)[0]
+    saudi_csv_path = f"{base_path}_saudi.csv"
+    output_path = f"{base_path}_saudi_enriched_with_housing.csv"
+    temp_path = f"{base_path}_saudi_temp_housing.csv"
+
+    logging.info("Starting housing analysis for all Saudi Arabia locations")
+    logging.info(f"Input CSV: {saudi_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
+
+    ensure_columns_in_csv(saudi_csv_path, HOUSING_COLUMNS, temp_path)
+    locations = get_locations_needing_processing(temp_path, "total_housings")
+    logging.info(f"Found {len(locations)} locations needing housing analysis")
+
+    if len(locations) == 0:
+        logging.info("All locations already have housing data")
+        os.rename(temp_path, output_path)
+        logging.info(f"All data saved to: {output_path}")
+        return output_path
+
+    processed_count = 0
+    housing_results = {}
+    total_locations = len(locations)
+
+    for batch_start in range(0, total_locations, batch_size):
+        batch = locations[batch_start : batch_start + batch_size]
+        logging.info(
+            f"Processing housing for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+        )
+
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            future_to_loc = {
+                executor.submit(
+                    fetch_housing_from_db,
+                    loc["lat"],
+                    loc["lng"],
+                    1,
+                ): loc
+                for loc in batch
+            }
+
+            for future in as_completed(future_to_loc):
+                loc = future_to_loc[future]
+                lat, lng = loc["lat"], loc["lng"]
+                try:
+                    housing_result = future.result()
+                except Exception as e:
+                    logging.error(f"Housing DB query failed for {lat}, {lng}: {e}")
+                    housing_result = {
+                        "total_housings": 0,
+                        "residential_housings": 0,
+                        "non_residential_housings": 0,
+                        "owned_housings": 0,
+                        "rented_housings": 0,
+                        "provided_housings": 0,
+                        "other_residential_housings": 0,
+                        "public_housing": 0,
+                        "work_camps": 0,
+                        "commercial_housings": 0,
+                        "other_housings": 0,
+                        "density_sum": 0.0,
+                    }
+
+                coord_key = f"{lat}_{lng}"
+                housing_results[coord_key] = {
+                    **housing_result,
+                    "housing_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                }
+                processed_count += 1
+
+        logging.info(
+            f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
+        )
+        update_csv_with_results(temp_path, housing_results, HOUSING_COLUMNS)
+        logging.info(
+            f"Batch progress saved: {processed_count} records updated in CSV"
+        )
+
+        housing_results = {}  # Clear for next batch
+
+    logging.info("Finalizing enriched output file...")
+    os.rename(temp_path, output_path)
+    logging.info(
+        f"Housing analysis completed: {processed_count} locations processed"
+    )
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
+
+    return output_path
 
 process_real_estate_data()
 current_dir = os.path.dirname(os.path.abspath(__file__))
 csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
-ensure_city_csv(csv_path)
-process_city_demographics(csv_path, 10)
-process_city_traffic(csv_path, 20)
-process_city_household(csv_path, batch_size=10, city=CITY_FILTER)
-process_city_housing(csv_path, batch_size=10, city=CITY_FILTER)
+# ensure_city_csv(csv_path)
+ensure_saudi_csv(csv_path)
+# process_city_demographics(csv_path, 10)
+process_saudi_demographics(csv_path,10)
+# process_city_traffic(csv_path, 20)
+process_saudi_traffic(csv_path,batch_size=10)
+# process_city_household(csv_path, batch_size=10, city=CITY_FILTER)
+process_saudi_household(csv_path,batch_size=10)
+# process_city_housing(csv_path, batch_size=10, city=CITY_FILTER)
+process_saudi_housing(csv_path,batch_size=10)
