@@ -319,7 +319,7 @@ def create_enriched_demographic_table():
                 THEN TRUE 
                 ELSE FALSE 
             END AS is_current
-        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_demographics" red
+        FROM raw_schema_marketplace."saudi_real_estate_saudi_enriched_with_demographics" red
     ),
     current_only AS (
         SELECT *
@@ -446,7 +446,7 @@ def create_enriched_household_table():
                 THEN TRUE 
                 ELSE FALSE 
             END AS is_current
-        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_household"
+        FROM raw_schema_marketplace."saudi_real_estate_saudi_enriched_with_household"
     ),
     current_records AS (
         SELECT *
@@ -544,7 +544,7 @@ def create_enriched_housing_table():
                 THEN TRUE 
                 ELSE FALSE 
             END AS is_current
-        FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_housing"
+        FROM raw_schema_marketplace."saudi_real_estate_saudi_enriched_with_housing"
     ),
     current_records AS (
         SELECT *
@@ -674,7 +674,7 @@ def create_enriched_traffic_table():
             THEN TRUE 
             ELSE FALSE 
         END AS is_current
-    FROM raw_schema_marketplace."saudi_real_estate_الرياض_enriched_with_traffic" te
+    FROM raw_schema_marketplace."saudi_real_estate_saudi_enriched_with_traffic" te
     ),
     current_only AS (
         SELECT *
