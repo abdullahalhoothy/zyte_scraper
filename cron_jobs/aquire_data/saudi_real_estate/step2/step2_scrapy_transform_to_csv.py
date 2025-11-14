@@ -45,9 +45,10 @@ rent_period_mapping = {
     3: "For Rent (Yearly)"
 }
 
-def process_real_estate_data():
+def process_raw_real_estate_data():
     print("Processing raw data...")
     file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ignore', 'raw_saudi_real_estate.csv')
+    print(f"Reading data from {file_path}...")
     df = pd.read_csv(file_path)
     
     if 'rent_period' not in df.columns or 'category_id' not in df.columns:
@@ -86,12 +87,11 @@ def process_real_estate_data():
 
     df = df.drop(columns=['category_ar'])
 
-    print("Data processing complete. Saving to CSV...")
     output_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'saudi_real_estate.csv')
     df.to_csv(output_path, index=False, mode='w')
     print(f"CSV file saved to {output_path}")
 
-    return df
+    return output_path
 
 if __name__ == "__main__":
-    process_real_estate_data()
+    process_raw_real_estate_data()

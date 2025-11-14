@@ -76,7 +76,7 @@ def poll_job_status(job_id, token) -> dict | None:
     while attempt < max_attempts:
         try:
             response = requests.get(
-                f"{JOB_STATUS_ENDPOINT}/{job_id}", headers=headers, timeout=30
+                f"{JOB_STATUS_ENDPOINT}/{job_id}", headers=headers, timeout=60
             )
             response.raise_for_status()
             job_data = response.json()

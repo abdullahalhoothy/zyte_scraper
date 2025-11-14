@@ -9,19 +9,21 @@ from step2_add_demographics import login_and_get_user
 from step2_add_demographics import fetch_household_from_db
 from step2_add_demographics import fetch_housing_from_db
 from step2_extract_listing_id import add_listing_ids_to_csv
-from step2_scrapy_transform_to_csv import process_real_estate_data
+from step2_scrapy_transform_to_csv import process_raw_real_estate_data
 import logging
 import argparse
 import sys
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--log-file", help="Path to shared log file", required=False)
 args = parser.parse_args()
 
-if(args.log_file):
+if args.log_file:
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..",".."))
+    grandparent_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..", ".."))
     sys.path.append(grandparent_dir)
     from logging_utils import setup_logging
+
     setup_logging(args.log_file)
 
 # --- Centralized column definitions ---
@@ -88,45 +90,6 @@ CATEGORY_FILTER = "shop_for_rent"
 CHUNK_SIZE = 5000
 
 
-def ensure_city_csv(
-    csv_path,
-    city=CITY_FILTER,
-    category=CATEGORY_FILTER,
-    columns=INPUT_COLUMNS,
-    chunk_size=CHUNK_SIZE,
-):
-    """
-    Ensure a city-specific CSV exists and is up-to-date (created if missing or older than 1 day).
-    Filters records by city and saves to a new CSV file with selected columns if needed.
-    Returns the path to the city CSV.
-    """
-    base_path = csv_path.rsplit(".csv", 1)[0]
-    city_csv_path = f"{base_path}_{city}.csv"
-    need_create = True
-    if os.path.exists(city_csv_path):
-        last_modified = datetime.fromtimestamp(os.path.getmtime(city_csv_path))
-        now = datetime.now()
-        if (now - last_modified).days < 1:
-            need_create = False
-    if need_create:
-        print(f"Creating {city} CSV: {city_csv_path}")
-        first_chunk = True
-        for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
-            city_chunk = chunk[chunk["city"] == city].copy()
-            # Filter for category
-            city_chunk = city_chunk[city_chunk["category"] == category]
-            city_chunk = city_chunk[columns]
-            if first_chunk:
-                city_chunk.to_csv(city_csv_path, index=False, mode="w")
-                first_chunk = False
-            else:
-                city_chunk.to_csv(
-                    city_csv_path, index=False, mode="a", header=False
-                )
-        logging.info(f"{city} records saved to: {city_csv_path}")
-    else:
-        print(f"{city} CSV is up-to-date: {city_csv_path}")
-    return city_csv_path
 
 def ensure_saudi_csv(
     csv_path,
@@ -192,16 +155,15 @@ def ensure_columns_in_csv(csv_path, columns, temp_path, chunk_size=CHUNK_SIZE):
 
 
 def get_locations_needing_processing(
-    temp_path, key_column, city=CITY_FILTER, chunk_size=CHUNK_SIZE
+    temp_path, key_column, chunk_size=CHUNK_SIZE
 ):
     """
-    Get locations for a city where key_column is NaN.
+    Get locations where key_column is NaN.
     """
     locations = []
     for chunk in pd.read_csv(temp_path, chunksize=chunk_size):
-        city_chunk = chunk[chunk["city"] == city].copy()
-        if len(city_chunk) > 0:
-            unprocessed = city_chunk[city_chunk[key_column].isna()]
+        if len(chunk) > 0:
+            unprocessed = chunk[chunk[key_column].isna()]
             for _, row in unprocessed.iterrows():
                 locations.append(
                     {
@@ -219,11 +181,10 @@ def update_csv_with_results(
     columns,
     object_columns=OBJECT_COLUMNS,
     date_columns=DATE_COLUMNS,
-    city_filter=CITY_FILTER,
     chunk_size=CHUNK_SIZE,
 ):
     """
-    Update temp CSV file with results for locations in a city.
+    Update temp CSV file with results for all locations.
     """
     temp_updated_path = f"{temp_path}_updating"
     first_chunk_update = True
@@ -232,8 +193,7 @@ def update_csv_with_results(
         for col in object_columns:
             if col in chunk.columns:
                 chunk[col] = chunk[col].astype("object")
-        city_mask = chunk["city"] == city_filter
-        for idx in chunk[city_mask].index:
+        for idx in chunk.index:
             chunk_lat = chunk.loc[idx, "latitude"]
             chunk_lng = chunk.loc[idx, "longitude"]
             coord_key = f"{chunk_lat}_{chunk_lng}"
@@ -261,6 +221,7 @@ def update_csv_with_results(
         logging.warning(
             f"Failed to replace {temp_path} with updated file {temp_updated_path}: {e}"
         )
+
 
 def process_saudi_traffic(csv_path: str, batch_size: int):
     """
@@ -292,6 +253,7 @@ def process_saudi_traffic(csv_path: str, batch_size: int):
     # Get authentication token once
     try:
         auth_token = get_auth_token()
+        auth_time = datetime.now()
         logging.info("Successfully authenticated with API")
     except Exception as e:
         logging.error(f"Authentication failed: {e}")
@@ -301,8 +263,18 @@ def process_saudi_traffic(csv_path: str, batch_size: int):
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
         logging.info(
-            f"Processing traffic for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+            f"Processing traffic for batch {batch_start + 1}-{min(batch_start + batch_size, total_locations)} of {total_locations}"
         )
+
+        # Check if re-authentication is needed (every ~30 minutes)
+        if (datetime.now() - auth_time).total_seconds() > 1800:
+            try:
+                auth_token = get_auth_token()
+                auth_time = datetime.now()
+                logging.info("Re-authenticated with API")
+            except Exception as e:
+                logging.error(f"Re-authentication failed: {e}")
+                # Continue with existing token or handle error
 
         try:
             # Process batch through API
@@ -341,6 +313,7 @@ def process_saudi_traffic(csv_path: str, batch_size: int):
 
     return output_path
 
+
 def process_saudi_demographics(csv_path: str, batch_size: int):
     """
     Process records for demographic analysis across all of Saudi Arabia.
@@ -375,7 +348,7 @@ def process_saudi_demographics(csv_path: str, batch_size: int):
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
         logging.info(
-            f"Processing demographics for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+            f"Processing demographics for batch {batch_start + 1}-{min(batch_start + batch_size, total_locations)} of {total_locations}"
         )
 
         user_id, id_token = login_and_get_user()
@@ -398,11 +371,15 @@ def process_saudi_demographics(csv_path: str, batch_size: int):
                 demo_result = future.result()
                 demo_results[f"{lat}_{lng}"] = {
                     **demo_result,
-                    "demographics_analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "demographics_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
                 }
                 processed_count += 1
 
-        logging.info(f"Progress checkpoint: {processed_count}/{total_locations} locations processed")
+        logging.info(
+            f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
+        )
         update_csv_with_results(temp_path, demo_results, DEMOGRAPHIC_COLUMNS)
         logging.info(f"Batch progress saved: {processed_count} records updated in CSV")
 
@@ -410,10 +387,13 @@ def process_saudi_demographics(csv_path: str, batch_size: int):
 
     logging.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logging.info(f"Demographic analysis completed: {processed_count} locations processed")
+    logging.info(
+        f"Demographic analysis completed: {processed_count} locations processed"
+    )
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
 
     return output_path
+
 
 def process_saudi_household(csv_path: str, batch_size: int):
     """
@@ -446,7 +426,7 @@ def process_saudi_household(csv_path: str, batch_size: int):
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
         logging.info(
-            f"Processing household for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+            f"Processing household for batch {batch_start + 1}-{min(batch_start + batch_size, total_locations)} of {total_locations}"
         )
 
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
@@ -488,19 +468,16 @@ def process_saudi_household(csv_path: str, batch_size: int):
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, hh_results, HOUSEHOLD_COLUMNS)
-        logging.info(
-            f"Batch progress saved: {processed_count} records updated in CSV"
-        )
+        logging.info(f"Batch progress saved: {processed_count} records updated in CSV")
         hh_results = {}  # Clear for next batch
 
     logging.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logging.info(
-        f"Household analysis completed: {processed_count} locations processed"
-    )
+    logging.info(f"Household analysis completed: {processed_count} locations processed")
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
 
     return output_path
+
 
 def process_saudi_housing(csv_path: str, batch_size: int):
     """
@@ -533,7 +510,7 @@ def process_saudi_housing(csv_path: str, batch_size: int):
     for batch_start in range(0, total_locations, batch_size):
         batch = locations[batch_start : batch_start + batch_size]
         logging.info(
-            f"Processing housing for batch {batch_start+1}-{min(batch_start+batch_size, total_locations)} of {total_locations}"
+            f"Processing housing for batch {batch_start + 1}-{min(batch_start + batch_size, total_locations)} of {total_locations}"
         )
 
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
@@ -582,32 +559,24 @@ def process_saudi_housing(csv_path: str, batch_size: int):
             f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
         )
         update_csv_with_results(temp_path, housing_results, HOUSING_COLUMNS)
-        logging.info(
-            f"Batch progress saved: {processed_count} records updated in CSV"
-        )
+        logging.info(f"Batch progress saved: {processed_count} records updated in CSV")
 
         housing_results = {}  # Clear for next batch
 
     logging.info("Finalizing enriched output file...")
     os.rename(temp_path, output_path)
-    logging.info(
-        f"Housing analysis completed: {processed_count} locations processed"
-    )
+    logging.info(f"Housing analysis completed: {processed_count} locations processed")
     logging.info(f"Enriched CSV with all data saved to: {output_path}")
 
     return output_path
 
-process_real_estate_data()
-current_dir = os.path.dirname(os.path.abspath(__file__))
-csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
+
+csv_path = process_raw_real_estate_data()
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
-# ensure_city_csv(csv_path)
 ensure_saudi_csv(csv_path)
-# process_city_demographics(csv_path, 10)
-process_saudi_demographics(csv_path,10)
-# process_city_traffic(csv_path, 20)
-process_saudi_traffic(csv_path,batch_size=10)
-# process_city_household(csv_path, batch_size=10, city=CITY_FILTER)
-process_saudi_household(csv_path,batch_size=10)
-# process_city_housing(csv_path, batch_size=10, city=CITY_FILTER)
-process_saudi_housing(csv_path,batch_size=10)
+# process_saudi_demographics(csv_path, 10)
+process_saudi_traffic(csv_path, batch_size=10)
+# process_saudi_household(csv_path, batch_size=10)
+# process_saudi_housing(csv_path, batch_size=10)
