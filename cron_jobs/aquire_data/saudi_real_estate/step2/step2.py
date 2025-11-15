@@ -572,8 +572,8 @@ def process_saudi_traffic(csv_path: str, batch_size: int):
 
 
 csv_path = process_raw_real_estate_data()
-# current_dir = os.path.dirname(__file__)
-# csv_path = os.path.join(current_dir, "saudi_real_estate.csv")
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
 ensure_saudi_csv(csv_path)
 # process_saudi_demographics(csv_path, 10)
