@@ -3,7 +3,7 @@ import os
 from time import sleep
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from cron_jobs.aquire_data.saudi_real_estate.step2.step2_traffic_analysis_api import process_saudi_traffic
+from step2_traffic_analysis_api import get_auth_token, process_traffic_batch
 from step2_add_demographics import fetch_demographics
 from step2_add_demographics import login_and_get_user
 from step2_add_demographics import fetch_household_from_db
@@ -480,9 +480,100 @@ def process_saudi_housing(csv_path: str, batch_size: int):
     return output_path
 
 
+def process_saudi_traffic(csv_path: str, batch_size: int):
+    """
+    Process records for traffic analysis across all of Saudi Arabia using the API endpoint.
+    """
+    base_path = csv_path.rsplit(".csv", 1)[0]
+    saudi_csv_path = f"{base_path}_saudi.csv"
+    output_path = f"{base_path}_saudi_enriched_with_traffic.csv"
+    temp_path = f"{base_path}_saudi_traffic_temp_processing.csv"
+
+    logging.info("Starting traffic analysis for all Saudi Arabia locations using API")
+    logging.info(f"Input CSV: {saudi_csv_path}")
+    logging.info(f"Enriched Output CSV: {output_path}")
+
+    ensure_columns_in_csv(saudi_csv_path, TRAFFIC_COLUMNS, temp_path)
+    locations = get_locations_needing_processing(temp_path, "traffic_score")
+    logging.info(f"Found {len(locations)} locations needing traffic analysis")
+
+    if len(locations) == 0:
+        logging.info("All locations already have traffic data")
+        os.rename(temp_path, output_path)
+        logging.info(f"All data saved to: {output_path}")
+        return output_path
+
+    processed_count = 0
+    traffic_results = {}
+    total_locations = len(locations)
+
+    # Get authentication token once
+    try:
+        auth_token = get_auth_token()
+        auth_time = datetime.now()
+        logging.info("Successfully authenticated with API")
+    except Exception as e:
+        logging.error(f"Authentication failed: {e}")
+        return output_path
+
+    # Process locations in batches
+    for batch_start in range(0, total_locations, batch_size):
+        batch = locations[batch_start : batch_start + batch_size]
+        logging.info(
+            f"Processing traffic for batch {batch_start + 1}-{min(batch_start + batch_size, total_locations)} of {total_locations}"
+        )
+
+        # Check if re-authentication is needed (every ~30 minutes)
+        if (datetime.now() - auth_time).total_seconds() > 1800:
+            try:
+                auth_token = get_auth_token()
+                auth_time = datetime.now()
+                logging.info("Re-authenticated with API")
+            except Exception as e:
+                logging.error(f"Re-authentication failed: {e}")
+                # Continue with existing token or handle error
+
+        try:
+            # Process batch through API
+            batch_results = process_traffic_batch(batch, auth_token)
+            traffic_results.update(batch_results)
+            processed_count += len(batch)
+
+        except Exception as e:
+            logging.error(f"Failed to process batch {batch_start}: {e}")
+            # Mark all locations in failed batch as errored
+            for loc in batch:
+                lat, lng = loc["lat"], loc["lng"]
+                coord_key = f"{lat}_{lng}"
+                traffic_results[coord_key] = {
+                    "traffic_score": 0,
+                    "traffic_storefront_score": 0,
+                    "traffic_area_score": 0,
+                    "traffic_screenshot_filename": "",
+                    "traffic_analysis_date": datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    ),
+                }
+            processed_count += len(batch)
+
+        logging.info(
+            f"Progress checkpoint: {processed_count}/{total_locations} locations processed"
+        )
+        update_csv_with_results(temp_path, traffic_results, TRAFFIC_COLUMNS)
+        logging.info(f"Batch progress saved: {processed_count} records updated in CSV")
+        traffic_results = {}  # Clear for next batch
+
+    logging.info("Finalizing enriched output file...")
+    os.rename(temp_path, output_path)
+    logging.info(f"Traffic analysis completed: {processed_count} locations processed")
+    logging.info(f"Enriched CSV with all data saved to: {output_path}")
+
+    return output_path
+
+
 csv_path = process_raw_real_estate_data()
-# current_dir = os.path.dirname(os.path.abspath(__file__))
-# csv_path = os.path.join(current_dir, "..", "saudi_real_estate.csv")
+# current_dir = os.path.dirname(__file__)
+# csv_path = os.path.join(current_dir, "saudi_real_estate.csv")
 add_listing_ids_to_csv(csv_path)
 ensure_saudi_csv(csv_path)
 # process_saudi_demographics(csv_path, 10)
